@@ -41,10 +41,15 @@ class ScoringMetrics(BaseModel):
     experience_relevance: int = Field(ge=1, le=5)
 
 
-class CandidateResult(BaseModel):
+class CandidateProfile(BaseModel):
+    """Extract-only candidate: id, name, parsed text. No scoring."""
+    id: str
     name: str
-    score: int = Field(ge=0, le=100)
-    relevant_skills: list[str] = Field(default_factory=list)
-    experience_years: Optional[float] = None
-    metrics: ScoringMetrics
-    summary: str = ""
+    parsed_text: str
+
+
+class CandidateResult(BaseModel):
+    """Alias for API: same as CandidateProfile (extract-only for now)."""
+    id: str
+    name: str
+    parsed_text: str

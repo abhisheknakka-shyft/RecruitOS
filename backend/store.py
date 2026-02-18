@@ -1,10 +1,10 @@
 from typing import Optional
 
-from backend.models import Calibration, CandidateResult
+from backend.models import Calibration, CandidateProfile, CandidateResult
 
 _calibrations: dict[str, Calibration] = {}
 _active_calibration_id: Optional[str] = None
-_candidates_by_calibration: dict[str, list[CandidateResult]] = {}
+_candidates_by_calibration: dict[str, list[CandidateProfile]] = {}
 
 
 def get_calibration(calibration_id: Optional[str] = None) -> Optional[Calibration]:
@@ -49,15 +49,15 @@ def get_candidates(calibration_id: Optional[str] = None) -> list[CandidateResult
     cid = calibration_id or _active_calibration_id
     if not cid:
         return []
-    candidates = _candidates_by_calibration.get(cid, [])
-    return sorted(candidates, key=lambda c: c.score, reverse=True)
+    profiles = _candidates_by_calibration.get(cid, [])
+    return [CandidateResult(id=p.id, name=p.name, parsed_text=p.parsed_text) for p in profiles]
 
 
-def add_candidates(calibration_id: str, results: list[CandidateResult]) -> None:
+def add_candidates(calibration_id: str, profiles: list[CandidateProfile]) -> None:
     global _candidates_by_calibration
     if calibration_id not in _candidates_by_calibration:
         _candidates_by_calibration[calibration_id] = []
-    _candidates_by_calibration[calibration_id].extend(results)
+    _candidates_by_calibration[calibration_id].extend(profiles)
 
 
 def clear_candidates(calibration_id: Optional[str] = None) -> None:

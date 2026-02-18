@@ -14,33 +14,22 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
-import { ScoreCircle } from "@/components/ScoreCircle";
-import { DotScale } from "@/components/DotScale";
-import { Upload, LayoutDashboard, FileText, Loader2, Plus, Trash2 } from "lucide-react";
+import { Upload, LayoutDashboard, FileText, Loader2, Plus, Trash2, ArrowLeft, User } from "lucide-react";
 
 export default function DashboardPage() {
   const [calibrations, setCalibrations] = useState<Calibration[]>([]);
   const [activeCalibration, setActiveCalibrationState] = useState<Calibration | null>(null);
   const [selectedCalibrationId, setSelectedCalibrationId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidateResult[]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedCandidate = selectedCandidateId
+    ? candidates.find((c) => c.id === selectedCandidateId) ?? null
+    : null;
 
   const selectedCalibration =
     selectedCalibrationId
@@ -284,94 +273,51 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {candidates.length === 0 ? (
+              {selectedCandidate ? (
+                <div className="space-y-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setSelectedCandidateId(null)}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to all candidates
+                  </Button>
+                  <div>
+                    <h3 className="mb-2 font-medium">{selectedCandidate.name}</h3>
+                    <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/50 p-4 text-sm whitespace-pre-wrap font-sans">
+                      {selectedCandidate.parsed_text || "(No text extracted)"}
+                    </pre>
+                  </div>
+                </div>
+              ) : candidates.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">
-                  No candidates yet. Upload PDF resumes to see the leaderboard.
+                  No candidates yet. Upload PDF resumes to see profiles and parsed text.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Candidate</TableHead>
-                      <TableHead>Relevance score</TableHead>
-                      <TableHead>Relevant skills</TableHead>
-                      <TableHead>Experience</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {candidates.map((c) => (
-                      <TableRow key={`${c.name}-${c.score}-${c.summary}`}>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell>
-                          <InsightPopover candidate={c} />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {c.relevant_skills.slice(0, 5).map((s) => (
-                              <Badge key={s} variant="secondary" className="text-xs">
-                                {s}
-                              </Badge>
-                            ))}
-                            {c.relevant_skills.length > 5 && (
-                              <Badge variant="outline">+{c.relevant_skills.length - 5}</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {c.experience_years != null
-                            ? `${c.experience_years} years`
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {candidates.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
+                        onClick={() => setSelectedCandidateId(c.id)}
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                          <User className="h-5 w-5 text-primary" />
+                        </div>
+                        <span className="font-medium truncate">{c.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
         )}
       </main>
     </div>
-  );
-}
-
-function InsightPopover({ candidate }: { candidate: CandidateResult }) {
-  const m = candidate.metrics;
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" className="focus:outline-none focus:ring-2 focus:ring-primary rounded-full">
-          <ScoreCircle score={candidate.score} size={64} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80" align="start">
-        <div className="space-y-3">
-          <h4 className="font-medium">Score breakdown</h4>
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Skill relevance</span>
-              <DotScale rating={m.skill_relevance} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Title relevance</span>
-              <DotScale rating={m.title_relevance} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Work relevance</span>
-              <DotScale rating={m.work_relevance} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Experience relevance</span>
-              <DotScale rating={m.experience_relevance} />
-            </div>
-          </div>
-          {candidate.summary && (
-            <p className="border-t pt-2 text-sm text-muted-foreground">
-              {candidate.summary}
-            </p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }

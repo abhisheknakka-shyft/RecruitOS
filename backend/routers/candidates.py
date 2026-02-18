@@ -1,10 +1,10 @@
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
-from backend.models import CandidateResult
+from backend.models import CandidateProfile, CandidateResult
 from backend import store
 from backend.parser import extract_text_from_pdf
-from backend.scoring_engine import score_resume
 
 router = APIRouter()
 
@@ -24,18 +24,18 @@ async def upload_resumes(files: list[UploadFile] = File(...)) -> list[CandidateR
             status_code=400,
             detail="No calibration set. Complete the calibration form first.",
         )
-    results: list[CandidateResult] = []
+    profiles: list[CandidateProfile] = []
     for f in files:
         if not f.filename or not f.filename.lower().endswith(".pdf"):
             continue
-        content = await f.read()
-        text = extract_text_from_pdf(content)
-        if not text.strip():
+        try:
+            content = await f.read()
+            text = extract_text_from_pdf(content)
+        except Exception:
             continue
         name = _name_from_filename(f.filename)
-        result = score_resume(cal.model_dump(), text, default_name=name)
-        results.append(result)
-    store.add_candidates(cal.id, results)
+        profiles.append(CandidateProfile(id=str(uuid.uuid4()), name=name, parsed_text=text.strip() or ""))
+    store.add_candidates(cal.id, profiles)
     return store.get_candidates(cal.id)
 
 
