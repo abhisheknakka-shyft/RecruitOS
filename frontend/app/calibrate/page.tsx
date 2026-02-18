@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,10 @@ import {
   type CalibrationCreate,
   type Calibration,
 } from "@/lib/api";
-import { Briefcase, FileText, Plus, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { Briefcase, Plus, ChevronDown, ChevronRight, Info, Loader2 } from "lucide-react";
+
+const inputClassName =
+  "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
 
 const SENIORITY_OPTIONS = ["Entry", "Mid-Level", "Senior", "Manager", "Director", "Vice President", "CXO"];
 const DEGREE_OPTIONS = ["Certificate", "Bachelors", "Masters", "Doctorate"];
@@ -118,6 +121,7 @@ export default function CalibratePage() {
   const [expandedExperience, setExpandedExperience] = useState(true);
   const [expandedEducation, setExpandedEducation] = useState(true);
   const [expandedAdvanced, setExpandedAdvanced] = useState(true);
+  const [loadingCalibration, setLoadingCalibration] = useState(false);
 
   useEffect(() => {
     listCalibrations()
@@ -125,17 +129,10 @@ export default function CalibratePage() {
       .catch(() => setCalibrations([]));
   }, []);
 
-  useEffect(() => {
-    if (editId) {
-      setSelectedId(editId);
-      selectCalibration(editId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
-
-  const selectCalibration = async (id: string | null) => {
+  const selectCalibration = useCallback(async (id: string | null) => {
     setSelectedId(id);
     if (!id) {
+      setLoadingCalibration(false);
       setRequisition_name("");
       setRole("");
       setJob_description("");
@@ -158,6 +155,7 @@ export default function CalibratePage() {
       setExclude_short_tenure("none");
       return;
     }
+    setLoadingCalibration(true);
     try {
       const cal = await getCalibrationById(id);
       if (cal) {
@@ -188,8 +186,17 @@ export default function CalibratePage() {
     } catch {
       setCalibrations((prev) => prev.filter((c) => c.id !== id));
       setSelectedId(null);
+    } finally {
+      setLoadingCalibration(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (editId) {
+      setSelectedId(editId);
+      selectCalibration(editId);
+    }
+  }, [editId, selectCalibration]);
 
   const toggleSeniority = (s: string) => {
     setSeniority_levels((prev) =>
@@ -252,22 +259,22 @@ export default function CalibratePage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-10 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <Link href="/" className="font-semibold text-primary">
             RecruitOS
           </Link>
-          <nav className="flex gap-4">
-            <Link href="/calibrate" className="text-sm font-medium text-primary underline">
+          <nav className="flex gap-5">
+            <Link href="/calibrate" className="text-sm font-medium text-primary underline underline-offset-4">
               Calibrate
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Dashboard
             </Link>
-            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Pipeline
             </Link>
-            <Link href="/insights" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/insights" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Insights
             </Link>
           </nav>
@@ -275,28 +282,29 @@ export default function CalibratePage() {
       </header>
 
       <main className="container mx-auto max-w-3xl px-4 py-8">
-        <nav className="mb-4 text-sm text-muted-foreground">
-          <Link href="/" className="hover:text-foreground">Home</Link>
-          <span className="mx-2">›</span>
-          <span className="text-foreground">{breadcrumbLabel}</span>
+        <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+          <Link href="/" className="transition-colors hover:text-foreground">Home</Link>
+          <span aria-hidden>/</span>
+          <span className="font-medium text-foreground">{breadcrumbLabel}</span>
         </nav>
-        <h1 className="text-2xl font-semibold">Calibration</h1>
-        <p className="mb-8 text-sm text-muted-foreground">
-          Calibration captures the job requirements as agreed with the hiring manager. Do not accidentally modify.
+        <h1 className="text-2xl font-semibold tracking-tight">Calibration</h1>
+        <p className="mb-8 mt-1 text-sm text-muted-foreground">
+          Job requirements as agreed with the hiring manager.
         </p>
 
         {calibrations.length > 0 && (
-          <Card className="mb-6">
+          <Card className="mb-8 border-border/80 shadow-sm">
             <CardContent className="pt-6">
-              <Label className="mb-2 block">Requisition</Label>
+              <Label className="mb-3 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Requisition</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant={selectedId === null ? "default" : "outline"}
                   size="sm"
                   onClick={() => selectCalibration(null)}
+                  className="transition-colors"
                 >
-                  <Plus className="mr-1 h-4 w-4" />
+                  <Plus className="mr-1.5 h-4 w-4" />
                   New
                 </Button>
                 {calibrations.map((c) => (
@@ -306,6 +314,8 @@ export default function CalibratePage() {
                     variant={selectedId === c.id ? "default" : "outline"}
                     size="sm"
                     onClick={() => selectCalibration(c.id)}
+                    disabled={loadingCalibration && selectedId === c.id}
+                    className="transition-colors"
                   >
                     {c.requisition_name}
                   </Button>
@@ -315,12 +325,20 @@ export default function CalibratePage() {
           </Card>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Card>
+        <form onSubmit={handleSubmit} className="relative space-y-8">
+          {loadingCalibration && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/80 backdrop-blur-[2px]" aria-live="polite">
+              <div className="flex items-center gap-2 rounded-lg bg-muted/90 px-4 py-3 text-sm font-medium text-muted-foreground shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading calibration…
+              </div>
+            </div>
+          )}
+          <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Who do you want to hire?</CardTitle>
+              <CardTitle className="text-base font-semibold">Who do you want to hire?</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="req" className="flex items-center gap-1">
@@ -373,16 +391,16 @@ export default function CalibratePage() {
                   onChange={(e) => setJob_description(e.target.value)}
                   placeholder="Paste or type the full job description"
                   rows={4}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className={inputClassName}
                 />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Who is your ideal candidate?</CardTitle>
-              <p className="text-sm text-muted-foreground">
+              <CardTitle className="text-base font-semibold">Who is your ideal candidate?</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Candidates you have hired before, given offer to, or would hire in the future.
               </p>
             </CardHeader>
@@ -394,23 +412,29 @@ export default function CalibratePage() {
                 onChange={(e) => setIdeal_candidate(e.target.value)}
                 placeholder="Describe ideal candidate profile"
                 rows={3}
-                className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className={`mt-2 ${inputClassName}`}
               />
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Refine your Requirements</CardTitle>
+              <CardTitle className="text-base font-semibold">Refine your Requirements</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <SkillsInput value={skills} onChange={setSkills} />
               </div>
 
-              <details open={expandedExperience} onToggle={() => setExpandedExperience((e) => !e)} className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-medium">
-                  {expandedExperience ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <details open={expandedExperience} className="group">
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExpandedExperience((prev) => !prev);
+                  }}
+                >
+                  {expandedExperience ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                   Experience
                 </summary>
                 <div className="space-y-4 pl-6 pt-2">
@@ -465,9 +489,15 @@ export default function CalibratePage() {
                 </div>
               </details>
 
-              <details open={expandedEducation} onToggle={() => setExpandedEducation((e) => !e)} className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-medium">
-                  {expandedEducation ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <details open={expandedEducation} className="group">
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExpandedEducation((prev) => !prev);
+                  }}
+                >
+                  {expandedEducation ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                   Education
                 </summary>
                 <div className="space-y-4 pl-6 pt-2">
@@ -487,7 +517,7 @@ export default function CalibratePage() {
                     <div className="space-y-2">
                       <Label>Graduation Year (from)</Label>
                       <select
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={graduation_year_min ?? ""}
                         onChange={(e) => setGraduation_year_min(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -500,7 +530,7 @@ export default function CalibratePage() {
                     <div className="space-y-2">
                       <Label>Graduation Year (to)</Label>
                       <select
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={graduation_year_max ?? ""}
                         onChange={(e) => setGraduation_year_max(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -514,9 +544,15 @@ export default function CalibratePage() {
                 </div>
               </details>
 
-              <details open={expandedAdvanced} onToggle={() => setExpandedAdvanced((e) => !e)} className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-medium">
-                  {expandedAdvanced ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <details open={expandedAdvanced} className="group">
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExpandedAdvanced((prev) => !prev);
+                  }}
+                >
+                  {expandedAdvanced ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                   Advanced Options
                 </summary>
                 <div className="space-y-4 pl-6 pt-2">
@@ -566,11 +602,22 @@ export default function CalibratePage() {
             </CardContent>
           </Card>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-          <div className="flex gap-3">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Save & go to Dashboard"}
+          <div className="flex flex-wrap gap-3 border-t border-border/60 pt-6">
+            <Button type="submit" disabled={loading} className="min-w-[180px]">
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save & go to Dashboard"
+              )}
             </Button>
             <Button type="button" variant="outline" asChild>
               <Link href="/dashboard">Dashboard</Link>

@@ -62,7 +62,6 @@ export default function DashboardPage() {
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Calibration[]>([]);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [compareState, setCompareState] = useState<{ calId: string; id1: string; id2: string } | null>(null);
 
   const fetchCalibrations = async () => {
     try {
@@ -144,9 +143,6 @@ export default function DashboardPage() {
       }));
       setExpandedCandidateByCalibrationId((prev) =>
         prev[calibrationId] === candidateId ? { ...prev, [calibrationId]: null } : prev
-      );
-      setCompareState((prev) =>
-        prev?.calId === calibrationId && (prev.id1 === candidateId || prev.id2 === candidateId) ? null : prev
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove resume");
@@ -337,7 +333,6 @@ export default function DashboardPage() {
               expandedCandidateId={expandedCandidateByCalibrationId[cal.id] ?? null}
               uploading={uploadingCalibrationId === cal.id}
               deletingCandidateId={deletingCandidateId}
-              compareState={compareState?.calId === cal.id ? compareState : null}
               onUpload={(e) => onUpload(e, cal.id)}
               onDeleteJob={() => handleDelete(cal.id)}
               onCopy={() => handleCopyCalibration(cal)}
@@ -346,7 +341,6 @@ export default function DashboardPage() {
               onCollapseCandidate={() => setExpandedCandidate(cal.id, null)}
               onDeleteCandidate={(candidateId) => onDeleteCandidate(cal.id, candidateId)}
               onUpdateCandidate={(candidateId, update) => onUpdateCandidate(cal.id, candidateId, update)}
-              onCompareSelect={(id1, id2) => setCompareState(id1 && id2 ? { calId: cal.id, id1, id2 } : null)}
             />
           ))}
         </div>
@@ -464,7 +458,6 @@ function JobCard({
   expandedCandidateId,
   uploading,
   deletingCandidateId,
-  compareState,
   onUpload,
   onDeleteJob,
   onCopy,
@@ -473,14 +466,12 @@ function JobCard({
   onCollapseCandidate,
   onDeleteCandidate,
   onUpdateCandidate,
-  onCompareSelect,
 }: {
   calibration: Calibration;
   candidates: CandidateResult[];
   expandedCandidateId: string | null;
   uploading: boolean;
   deletingCandidateId: string | null;
-  compareState: { calId: string; id1: string; id2: string } | null;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDeleteJob: () => void;
   onCopy: () => void;
@@ -489,7 +480,6 @@ function JobCard({
   onCollapseCandidate: () => void;
   onDeleteCandidate: (candidateId: string) => void;
   onUpdateCandidate: (candidateId: string, update: { stage?: string; rating?: number; notes?: string }) => void;
-  onCompareSelect: (id1: string | null, id2: string | null) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localNotes, setLocalNotes] = useState("");
@@ -498,9 +488,6 @@ function JobCard({
     if (expandedCandidate) setLocalNotes(expandedCandidate.notes ?? "");
   }, [expandedCandidate?.id, expandedCandidate?.notes]);
   const stages = calibration.pipeline_stages?.length ? calibration.pipeline_stages : ["Applied", "Screening", "Interview", "Offer"];
-  const compareCandidates = compareState
-    ? [candidates.find((c) => c.id === compareState.id1), candidates.find((c) => c.id === compareState.id2)].filter(Boolean) as CandidateResult[]
-    : [];
 
   return (
     <Card className="overflow-hidden">
@@ -554,30 +541,7 @@ function JobCard({
           <p className="border-b px-4 py-2 text-sm font-medium text-muted-foreground">
             Candidates ({candidates.length})
           </p>
-          {compareState && compareCandidates.length === 2 ? (
-            <div className="space-y-4 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Compare candidates</span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => onCompareSelect(null, null)}>
-                  Close compare
-                </Button>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {compareCandidates.map((c) => (
-                  <div key={c.id} className="rounded-lg border bg-background p-4">
-                    <p className="mb-1 font-medium">{getDisplayNameFromParsedText(c.parsed_text, c.name)}</p>
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      {c.stage ?? "Applied"}
-                      {c.rating != null ? ` · ${c.rating}/5` : ""}
-                    </p>
-                    <pre className="max-h-[40vh] overflow-auto text-xs whitespace-pre-wrap font-sans">
-                      {c.parsed_text || "(No text extracted)"}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : expandedCandidate ? (
+          {expandedCandidate ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onCollapseCandidate}>
@@ -659,8 +623,6 @@ function JobCard({
                 const displayName = getDisplayNameFromParsedText(c.parsed_text, c.name);
                 const initials = getInitialsFromName(displayName);
                 const isDeleting = deletingCandidateId === c.id;
-                const isCompareA = compareState?.id1 === c.id;
-                const isCompareB = compareState?.id2 === c.id;
                 return (
                   <li key={c.id}>
                     <div className="flex items-center gap-2 p-4">
@@ -694,32 +656,6 @@ function JobCard({
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={`h-7 w-7 shrink-0 text-xs ${isCompareA ? "bg-primary text-primary-foreground" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCompareSelect(c.id, compareState?.id2 ?? null);
-                        }}
-                        title="Compare as A"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={`h-7 w-7 shrink-0 text-xs ${isCompareB ? "bg-primary text-primary-foreground" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCompareSelect(compareState?.id1 ?? null, c.id);
-                        }}
-                        title="Compare as B"
-                      >
-                        B
-                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
