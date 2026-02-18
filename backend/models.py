@@ -4,6 +4,9 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+DEFAULT_PIPELINE_STAGES = ["Applied", "Screening", "Interview", "Offer"]
+
+
 class CalibrationCreate(BaseModel):
     requisition_name: str
     role: str
@@ -27,6 +30,8 @@ class CalibrationCreate(BaseModel):
     relocation_allowed: bool = False
     workplace_type: str = ""  # Onsite | Hybrid | Remote Within Country | Remote Globally
     exclude_short_tenure: str = "none"  # none | 6months | 1year | 2years
+    pipeline_stages: list[str] = Field(default_factory=lambda: list(DEFAULT_PIPELINE_STAGES))
+    is_template: bool = False
 
 
 class Calibration(CalibrationCreate):
@@ -42,14 +47,34 @@ class ScoringMetrics(BaseModel):
 
 
 class CandidateProfile(BaseModel):
-    """Extract-only candidate: id, name, parsed text. No scoring."""
+    """Candidate profile: id, name, parsed text, pipeline stage, rating, notes, optional AI summary."""
     id: str
     name: str
     parsed_text: str
+    created_at: Optional[datetime] = None
+    source_filename: Optional[str] = None
+    stage: Optional[str] = None
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    notes: Optional[str] = None
+    ai_summary: Optional[str] = None  # 1–2 sentence LLM summary for pipeline view
 
 
 class CandidateResult(BaseModel):
-    """Alias for API: same as CandidateProfile (extract-only for now)."""
+    """API response: same fields as CandidateProfile."""
     id: str
     name: str
     parsed_text: str
+    created_at: Optional[datetime] = None
+    source_filename: Optional[str] = None
+    stage: Optional[str] = None
+    rating: Optional[int] = None
+    notes: Optional[str] = None
+    ai_summary: Optional[str] = None
+
+
+class CandidateUpdate(BaseModel):
+    """Partial update for candidate: stage, rating, notes, ai_summary."""
+    stage: Optional[str] = None
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    notes: Optional[str] = None
+    ai_summary: Optional[str] = None

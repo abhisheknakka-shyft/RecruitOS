@@ -39,17 +39,33 @@ export interface CalibrationCreate {
   relocation_allowed?: boolean;
   workplace_type?: string;
   exclude_short_tenure?: string;
+  pipeline_stages?: string[];
+  is_template?: boolean;
 }
 
 export interface Calibration extends CalibrationCreate {
   id: string;
   created_at: string;
+  pipeline_stages?: string[];
+  is_template?: boolean;
 }
 
 export interface CandidateResult {
   id: string;
   name: string;
   parsed_text: string;
+  created_at?: string | null;
+  source_filename?: string | null;
+  stage?: string | null;
+  rating?: number | null;
+  notes?: string | null;
+  ai_summary?: string | null;
+}
+
+export interface CandidateUpdate {
+  stage?: string;
+  rating?: number;
+  notes?: string;
 }
 
 export async function getCalibration(): Promise<Calibration | null> {
@@ -68,6 +84,32 @@ export async function getCalibrationById(id: string): Promise<Calibration | null
 
 export async function listCalibrations(): Promise<Calibration[]> {
   const res = await wrapFetch(`${API}/api/calibrations`);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function listTemplates(): Promise<Calibration[]> {
+  const res = await wrapFetch(`${API}/api/templates`);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function createFromTemplate(templateId: string, requisitionName?: string): Promise<Calibration> {
+  const res = await wrapFetch(`${API}/api/calibrations/from-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ template_id: templateId, requisition_name: requisitionName }),
+  });
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function saveAsTemplate(calibrationId: string, templateName?: string): Promise<Calibration> {
+  const res = await wrapFetch(`${API}/api/calibrations/save-as-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ calibration_id: calibrationId, template_name: templateName }),
+  });
   if (!res.ok) await handleResponse(res);
   return res.json();
 }
@@ -110,6 +152,65 @@ export async function getCandidates(calibrationId?: string): Promise<CandidateRe
   const url = calibrationId
     ? `${API}/api/candidates?calibration_id=${encodeURIComponent(calibrationId)}`
     : `${API}/api/candidates`;
+  const res = await wrapFetch(url);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function updateCandidate(
+  calibrationId: string,
+  candidateId: string,
+  body: CandidateUpdate
+): Promise<CandidateResult> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function summarizeCandidate(calibrationId: string, candidateId: string): Promise<CandidateResult> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}/summarize`,
+    { method: "POST" }
+  );
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function deleteCandidate(calibrationId: string, candidateId: string): Promise<void> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) await handleResponse(res);
+}
+
+export interface AnalyticsOverview {
+  by_stage: Record<string, number>;
+  total: number;
+  by_requisition: Array<{
+    id: string;
+    requisition_name: string;
+    role: string;
+    by_stage: Record<string, number>;
+    total: number;
+  }>;
+  filter_year?: number | null;
+  filter_month?: number | null;
+}
+
+export async function getAnalyticsOverview(params?: { year?: number; month?: number }): Promise<AnalyticsOverview> {
+  const sp = new URLSearchParams();
+  if (params?.year != null) sp.set("year", String(params.year));
+  if (params?.month != null) sp.set("month", String(params.month));
+  const qs = sp.toString();
+  const url = qs ? `${API}/api/analytics/overview?${qs}` : `${API}/api/analytics/overview`;
   const res = await wrapFetch(url);
   if (!res.ok) await handleResponse(res);
   return res.json();
