@@ -229,10 +229,16 @@ export default function CalibratePage() {
         workplace_type: workplace_type || undefined,
         exclude_short_tenure: exclude_short_tenure,
       };
-      const created = await createCalibration(body);
-      setCalibrations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-      setSelectedId(created.id);
-      router.push("/dashboard");
+      if (selectedId) {
+        const updated = await updateCalibration(selectedId, body);
+        setCalibrations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        router.push("/dashboard");
+      } else {
+        const created = await createCalibration(body);
+        setCalibrations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+        setSelectedId(created.id);
+        router.push("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save calibration");
     } finally {

@@ -14,13 +14,40 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, LayoutDashboard, FileText, Loader2, Plus, Trash2, ArrowLeft, FileText as FileTextIcon } from "lucide-react";
+import {
+  Upload,
+  LayoutDashboard,
+  FileText,
+  Loader2,
+  Plus,
+  Trash2,
+  ArrowLeft,
+  FileText as FileTextIcon,
+  Pencil,
+  Copy,
+} from "lucide-react";
+import {
+  getCalibrationById,
+  createCalibration,
+  type CalibrationCreate,
+} from "@/lib/api";
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+/** Derive display name from first line of parsed text if it looks like a person name, else use filename name. */
+function getDisplayNameFromParsedText(parsedText: string, fallbackName: string): string {
+  const firstLine = parsedText.split(/\r?\n/)[0]?.trim() ?? "";
+  const words = firstLine.split(/\s+/).filter((w) => /^[A-Za-z.-]+$/.test(w));
+  if (words.length >= 2 && words.length <= 5 && firstLine.length < 50) return firstLine;
+  return fallbackName;
+}
+
+/** Initials from name: only letters (first letter of first two letter-only words). */
+function getInitialsFromName(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w));
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  const a = words[0][0] ?? "";
+  const b = words[words.length - 1][0] ?? "";
+  return (a + b).toUpperCase().replace(/[^A-Z]/g, "") || "?";
 }
 
 export default function DashboardPage() {
