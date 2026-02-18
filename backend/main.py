@@ -10,7 +10,7 @@ from backend.routers import calibration, candidates
 _env = Path(__file__).resolve().parent / ".env"
 load_dotenv(_env)
 
-app = FastAPI(title="AutoRecruit API")
+app = FastAPI(title="RecruitOS API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

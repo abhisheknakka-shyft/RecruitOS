@@ -238,7 +238,7 @@ export default function CalibratePage() {
       <header className="border-b bg-card">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <Link href="/" className="font-semibold text-primary">
-            AutoRecruit
+            RecruitOS
           </Link>
           <nav className="flex gap-4">
             <Link href="/calibrate" className="text-sm font-medium text-primary underline">

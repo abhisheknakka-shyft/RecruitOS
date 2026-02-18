@@ -7,12 +7,12 @@ export default function HomePage() {
     <div className="min-h-screen bg-muted/30">
       <header className="border-b bg-card">
         <div className="container mx-auto flex h-14 items-center px-4">
-          <span className="font-semibold text-primary">AutoRecruit</span>
+          <span className="font-semibold text-primary">RecruitOS</span>
         </div>
       </header>
       <main className="container mx-auto flex flex-col items-center justify-center px-4 py-24">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          AI Recruitment Agent
+          RecruitOS
         </h1>
         <p className="mt-2 max-w-md text-center text-muted-foreground">
           Calibrate job requirements and get an AI-scored leaderboard of candidates.

@@ -1,4 +1,4 @@
-# RecruitOS – AI Recruitment Agent
+# RecruitOS
 
 Two-page app: **Calibrate** job requirements, then view a **Dashboard** leaderboard of candidates scored by AI.
 
@@ -17,7 +17,7 @@ cp .env.example .env              # Edit .env: set LLM_PROVIDER and the API key 
 Then start the API **from the project root** (the folder that contains `backend/`). Do not run uvicorn from inside `backend/` or you'll get `ModuleNotFoundError: No module named 'backend'`.
 
 ```bash
-cd ..                            # back to project root (AI Recruitment)
+cd ..                            # back to project root
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AutoRecruit",
-  description: "AI Recruitment Agent – calibrate job requirements and score candidates",
+  title: "RecruitOS",
+  description: "RecruitOS – calibrate job requirements and score candidates",
 };
 
 export default function RootLayout({
