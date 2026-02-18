@@ -201,10 +201,17 @@ export interface AnalyticsOverview {
     by_stage: Record<string, number>;
     total: number;
   }>;
+  filter_year?: number | null;
+  filter_month?: number | null;
 }
 
-export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
-  const res = await wrapFetch(`${API}/api/analytics/overview`);
+export async function getAnalyticsOverview(params?: { year?: number; month?: number }): Promise<AnalyticsOverview> {
+  const sp = new URLSearchParams();
+  if (params?.year != null) sp.set("year", String(params.year));
+  if (params?.month != null) sp.set("month", String(params.month));
+  const qs = sp.toString();
+  const url = qs ? `${API}/api/analytics/overview?${qs}` : `${API}/api/analytics/overview`;
+  const res = await wrapFetch(url);
   if (!res.ok) await handleResponse(res);
   return res.json();
 }

@@ -62,17 +62,35 @@ function stageLabel(stage: string): string {
   return STAGE_CONFIG[stage]?.label ?? stage;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function getYearMonthOptions() {
+  const now = new Date();
+  const years = [];
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) years.push(y);
+  return { years, months: MONTHS };
+}
+
 export default function InsightsPage() {
   const [data, setData] = useState<AnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterYear, setFilterYear] = useState<number | "">("");
+  const [filterMonth, setFilterMonth] = useState<number | "">("");
+  const { years, months } = getYearMonthOptions();
 
   useEffect(() => {
-    getAnalyticsOverview()
+    setLoading(true);
+    setError(null);
+    const params =
+      filterYear !== "" && filterMonth !== ""
+        ? { year: filterYear as number, month: filterMonth as number }
+        : undefined;
+    getAnalyticsOverview(params)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterYear, filterMonth]);
 
   if (loading) {
     return (
@@ -156,8 +174,57 @@ export default function InsightsPage() {
         )}
 
         <section className="mb-8">
-          <h2 className="mb-2 text-sm font-medium text-muted-foreground">At a Glance</h2>
-          <p className="mb-4 text-xs text-muted-foreground">All requisitions · current snapshot</p>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <h2 className="text-sm font-medium text-muted-foreground">At a Glance</h2>
+            <span className="text-muted-foreground">·</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Date of application received:</span>
+              <select
+                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value === "" ? "" : Number(e.target.value))}
+                aria-label="Filter by year"
+              >
+                <option value="">All time</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value === "" ? "" : Number(e.target.value))}
+                aria-label="Filter by month"
+                disabled={filterYear === ""}
+              >
+                <option value="">Month</option>
+                {months.map((m, i) => (
+                  <option key={m} value={i + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              {filterYear !== "" && (
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => {
+                    setFilterYear("");
+                    setFilterMonth("");
+                  }}
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="mb-4 text-xs text-muted-foreground">
+            {filterYear !== "" && filterMonth !== ""
+              ? `Applications received in ${MONTHS[(filterMonth as number) - 1]} ${filterYear}`
+              : "All requisitions · current snapshot"}
+          </p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {STAGE_ORDER.map((stage) => {
               const count = byStage[stage] ?? 0;
@@ -201,7 +268,7 @@ export default function InsightsPage() {
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => [value, ""]} />
+                        <Tooltip formatter={(value: number | undefined) => [value ?? 0, ""]} />
                         <Legend />
                       </PieChart>
                     </ResponsiveContainer>

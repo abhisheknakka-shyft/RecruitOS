@@ -1,19 +1,33 @@
-from fastapi import APIRouter
+from datetime import datetime
+
+from fastapi import APIRouter, Query
 
 from backend import store
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def _in_month(dt: datetime | None, year: int, month: int) -> bool:
+    if dt is None:
+        return False
+    return dt.year == year and dt.month == month
+
+
 @router.get("/overview")
-def get_analytics_overview():
-    """Aggregate pipeline metrics across all requisitions for HR insights."""
+def get_analytics_overview(
+    year: int | None = Query(None, description="Filter by application received year"),
+    month: int | None = Query(None, ge=1, le=12, description="Filter by application received month (1-12)"),
+):
+    """Aggregate pipeline metrics. Optionally filter by date of application received (candidate created_at)."""
     jobs = store.list_calibrations()
     by_stage: dict[str, int] = {}
     by_requisition: list[dict] = []
+    filter_month = year is not None and month is not None
 
     for job in jobs:
         candidates = store.get_candidates(job.id)
+        if filter_month:
+            candidates = [c for c in candidates if _in_month(c.created_at, year, month)]
         job_stages: dict[str, int] = {}
         for c in candidates:
             stage = c.stage or "Applied"
@@ -32,4 +46,6 @@ def get_analytics_overview():
         "by_stage": by_stage,
         "total": total,
         "by_requisition": by_requisition,
+        "filter_year": year,
+        "filter_month": month,
     }
