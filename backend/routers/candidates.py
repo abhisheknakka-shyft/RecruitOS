@@ -17,12 +17,15 @@ def list_candidates(
 
 
 @router.post("/upload", response_model=list[CandidateResult])
-async def upload_resumes(files: list[UploadFile] = File(...)) -> list[CandidateResult]:
-    cal = store.get_calibration()
+async def upload_resumes(
+    files: list[UploadFile] = File(...),
+    calibration_id: Optional[str] = Query(None, description="Target calibration; defaults to active"),
+) -> list[CandidateResult]:
+    cal = store.get_calibration(calibration_id) if calibration_id else store.get_calibration()
     if cal is None:
         raise HTTPException(
-            status_code=400,
-            detail="No calibration set. Complete the calibration form first.",
+            status_code=404,
+            detail="Calibration not found. It may have been deleted or the server restarted—refresh the page.",
         )
     profiles: list[CandidateProfile] = []
     for f in files:

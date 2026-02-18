@@ -24,6 +24,13 @@ def create_calibration(body: CalibrationCreate) -> Calibration:
     return cal
 
 
+@router.patch("/calibration/active")
+def set_active(body: SetActiveBody) -> dict:
+    if not store.set_active_calibration(body.calibration_id):
+        raise HTTPException(status_code=404, detail="Calibration not found.")
+    return {"active": body.calibration_id}
+
+
 @router.patch("/calibration/{calibration_id}", response_model=Calibration)
 def update_calibration(calibration_id: str, body: CalibrationCreate) -> Calibration:
     existing = store.get_calibration(calibration_id)
@@ -57,13 +64,6 @@ def get_calibration_by_id(calibration_id: str) -> Calibration:
     if cal is None:
         raise HTTPException(status_code=404, detail="Calibration not found.")
     return cal
-
-
-@router.patch("/calibration/active")
-def set_active(body: SetActiveBody) -> dict:
-    if not store.set_active_calibration(body.calibration_id):
-        raise HTTPException(status_code=404, detail="Calibration not found.")
-    return {"active": body.calibration_id}
 
 
 @router.delete("/calibration/{calibration_id}")
