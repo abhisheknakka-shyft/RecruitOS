@@ -42,14 +42,18 @@ class ScoringMetrics(BaseModel):
 
 
 class CandidateProfile(BaseModel):
-    """Extract-only candidate: id, name, parsed text. No scoring."""
+    """Candidate profile: id, name, parsed text. Extensible for scoring (score, metrics, summary)."""
     id: str
     name: str
     parsed_text: str
+    created_at: Optional[datetime] = None
+    source_filename: Optional[str] = None
 
 
 class CandidateResult(BaseModel):
-    """Alias for API: same as CandidateProfile (extract-only for now)."""
+    """API response: same fields as CandidateProfile."""
     id: str
     name: str
     parsed_text: str
+    created_at: Optional[datetime] = None
+    source_filename: Optional[str] = None

@@ -50,6 +50,8 @@ export interface CandidateResult {
   id: string;
   name: string;
   parsed_text: string;
+  created_at?: string | null;
+  source_filename?: string | null;
 }
 
 export async function getCalibration(): Promise<Calibration | null> {
@@ -113,6 +115,14 @@ export async function getCandidates(calibrationId?: string): Promise<CandidateRe
   const res = await wrapFetch(url);
   if (!res.ok) await handleResponse(res);
   return res.json();
+}
+
+export async function deleteCandidate(calibrationId: string, candidateId: string): Promise<void> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) await handleResponse(res);
 }
 
 export async function uploadResumes(files: File[], calibrationId?: string): Promise<CandidateResult[]> {
