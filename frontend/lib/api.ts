@@ -39,11 +39,15 @@ export interface CalibrationCreate {
   relocation_allowed?: boolean;
   workplace_type?: string;
   exclude_short_tenure?: string;
+  pipeline_stages?: string[];
+  is_template?: boolean;
 }
 
 export interface Calibration extends CalibrationCreate {
   id: string;
   created_at: string;
+  pipeline_stages?: string[];
+  is_template?: boolean;
 }
 
 export interface CandidateResult {
@@ -52,6 +56,16 @@ export interface CandidateResult {
   parsed_text: string;
   created_at?: string | null;
   source_filename?: string | null;
+  stage?: string | null;
+  rating?: number | null;
+  notes?: string | null;
+  ai_summary?: string | null;
+}
+
+export interface CandidateUpdate {
+  stage?: string;
+  rating?: number;
+  notes?: string;
 }
 
 export async function getCalibration(): Promise<Calibration | null> {
@@ -70,6 +84,32 @@ export async function getCalibrationById(id: string): Promise<Calibration | null
 
 export async function listCalibrations(): Promise<Calibration[]> {
   const res = await wrapFetch(`${API}/api/calibrations`);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function listTemplates(): Promise<Calibration[]> {
+  const res = await wrapFetch(`${API}/api/templates`);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function createFromTemplate(templateId: string, requisitionName?: string): Promise<Calibration> {
+  const res = await wrapFetch(`${API}/api/calibrations/from-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ template_id: templateId, requisition_name: requisitionName }),
+  });
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function saveAsTemplate(calibrationId: string, templateName?: string): Promise<Calibration> {
+  const res = await wrapFetch(`${API}/api/calibrations/save-as-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ calibration_id: calibrationId, template_name: templateName }),
+  });
   if (!res.ok) await handleResponse(res);
   return res.json();
 }
@@ -117,12 +157,56 @@ export async function getCandidates(calibrationId?: string): Promise<CandidateRe
   return res.json();
 }
 
+export async function updateCandidate(
+  calibrationId: string,
+  candidateId: string,
+  body: CandidateUpdate
+): Promise<CandidateResult> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function summarizeCandidate(calibrationId: string, candidateId: string): Promise<CandidateResult> {
+  const res = await wrapFetch(
+    `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}/summarize`,
+    { method: "POST" }
+  );
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
 export async function deleteCandidate(calibrationId: string, candidateId: string): Promise<void> {
   const res = await wrapFetch(
     `${API}/api/calibrations/${encodeURIComponent(calibrationId)}/candidates/${encodeURIComponent(candidateId)}`,
     { method: "DELETE" }
   );
   if (!res.ok) await handleResponse(res);
+}
+
+export interface AnalyticsOverview {
+  by_stage: Record<string, number>;
+  total: number;
+  by_requisition: Array<{
+    id: string;
+    requisition_name: string;
+    role: string;
+    by_stage: Record<string, number>;
+    total: number;
+  }>;
+}
+
+export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
+  const res = await wrapFetch(`${API}/api/analytics/overview`);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
 }
 
 export async function uploadResumes(files: File[], calibrationId?: string): Promise<CandidateResult[]> {

@@ -1,8 +1,14 @@
 # RecruitOS – Future improvements
 
-Backlog and ideas for scaling the app (senior full-stack perspective).
+Backlog and ideas for scaling the app (senior full-stack perspective).  
+Inspired in part by [SpotAxis](https://github.com/Assystant/SpotAxis) (open-source ATS).
 
-## Done in this pass
+## Done (SpotAxis-inspired + earlier)
+- **Hiring pipeline / stages** – Each job has configurable stages (Applied → Screening → Interview → Offer). Candidates have a stage; move via dropdown in list or detail view.
+- **Custom rating & notes** – Rate each candidate 1–5 stars; add private notes (saved on blur). Compare ratings across candidates.
+- **Compare candidates** – Select two candidates (A/B) and view parsed text (and stage/rating) side-by-side.
+- **Job templates** – Save any job as a template; create new jobs from templates (modal: pick template, set title). Templates listed separately from live jobs.
+- (Earlier: persistence, delete resume, upload feedback, extensible candidate model.)
 - **Persistence** – Calibrations and candidates saved to `backend/data/recruitos_data.json`; survive server restart.
 - **Delete resume** – Per-candidate remove with confirm; remove from list and detail view.
 - **Upload feedback** – Success message after upload (e.g. “3 resumes added to Test 1”); 15MB max per PDF.

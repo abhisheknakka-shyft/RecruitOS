@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import calibration, candidates
+from backend.routers import analytics, calibration, candidates
 
 # Load .env from backend/ when run as "uvicorn backend.main:app" (cwd = project root)
 _env = Path(__file__).resolve().parent / ".env"
@@ -21,5 +21,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(calibration.router, prefix="/api", tags=["calibration"])
-app.include_router(candidates.router, prefix="/api", tags=["candidates"])
+app.include_router(calibration.router, prefix="/api")
+app.include_router(candidates.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")

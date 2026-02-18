@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { FileText, LayoutDashboard } from "lucide-react";
+import { FileText, LayoutDashboard, Kanban, BarChart3 } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -28,6 +28,18 @@ export default function HomePage() {
             <Link href="/dashboard">
               <LayoutDashboard className="h-4 w-4" />
               Dashboard
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="gap-2">
+            <Link href="/pipeline">
+              <Kanban className="h-4 w-4" />
+              Pipeline
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="gap-2">
+            <Link href="/insights">
+              <BarChart3 className="h-4 w-4" />
+              Insights
             </Link>
           </Button>
         </div>

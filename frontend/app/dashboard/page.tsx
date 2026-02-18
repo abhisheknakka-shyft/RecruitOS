@@ -4,10 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   listCalibrations,
+  listTemplates,
   getCandidates,
   uploadResumes,
   deleteCalibration,
   deleteCandidate,
+  updateCandidate,
+  createFromTemplate,
+  saveAsTemplate,
   type Calibration,
   type CandidateResult,
 } from "@/lib/api";
@@ -24,6 +28,8 @@ import {
   FileText as FileTextIcon,
   Pencil,
   Copy,
+  Star,
+  LayoutTemplate,
 } from "lucide-react";
 import { createCalibration, type CalibrationCreate } from "@/lib/api";
 
@@ -54,6 +60,9 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Calibration[]>([]);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [compareState, setCompareState] = useState<{ calId: string; id1: string; id2: string } | null>(null);
 
   const fetchCalibrations = async () => {
     try {
@@ -136,10 +145,57 @@ export default function DashboardPage() {
       setExpandedCandidateByCalibrationId((prev) =>
         prev[calibrationId] === candidateId ? { ...prev, [calibrationId]: null } : prev
       );
+      setCompareState((prev) =>
+        prev?.calId === calibrationId && (prev.id1 === candidateId || prev.id2 === candidateId) ? null : prev
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove resume");
     } finally {
       setDeletingCandidateId(null);
+    }
+  };
+
+  const onUpdateCandidate = async (
+    calibrationId: string,
+    candidateId: string,
+    update: { stage?: string; rating?: number; notes?: string }
+  ) => {
+    setError(null);
+    try {
+      const updated = await updateCandidate(calibrationId, candidateId, update);
+      setCandidatesByCalibrationId((prev) => ({
+        ...prev,
+        [calibrationId]: (prev[calibrationId] ?? []).map((c) => (c.id === candidateId ? updated : c)),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update");
+    }
+  };
+
+  const handleCreateFromTemplate = async (templateId: string, requisitionName: string) => {
+    setError(null);
+    try {
+      const created = await createFromTemplate(templateId, requisitionName || undefined);
+      setCalibrations((prev) => [created, ...prev]);
+      setCandidatesByCalibrationId((prev) => ({ ...prev, [created.id]: [] }));
+      setTemplateModalOpen(false);
+      setSuccessMessage(`Job "${created.requisition_name}" created from template`);
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create from template");
+    }
+  };
+
+  const handleSaveAsTemplate = async (calibrationId: string) => {
+    setError(null);
+    try {
+      await saveAsTemplate(calibrationId);
+      const list = await listTemplates();
+      setTemplates(list);
+      setSuccessMessage("Saved as template");
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save as template");
     }
   };
 
@@ -221,6 +277,12 @@ export default function DashboardPage() {
             <Link href="/dashboard" className="text-sm font-medium text-primary underline">
               Dashboard
             </Link>
+            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Pipeline
+            </Link>
+            <Link href="/insights" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Insights
+            </Link>
           </nav>
         </div>
       </header>
@@ -231,13 +293,40 @@ export default function DashboardPage() {
             <LayoutDashboard className="h-6 w-6" />
             Job postings
           </h1>
-          <Button asChild className="gap-2">
-            <Link href="/calibrate">
-              <Plus className="h-4 w-4" />
-              Add job posting
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                setTemplateModalOpen(true);
+                try {
+                  const list = await listTemplates();
+                  setTemplates(list);
+                } catch {
+                  setTemplates([]);
+                }
+              }}
+            >
+              <LayoutTemplate className="h-4 w-4" />
+              Create from template
+            </Button>
+            <Button asChild className="gap-2">
+              <Link href="/calibrate">
+                <Plus className="h-4 w-4" />
+                Add job posting
+              </Link>
+            </Button>
+          </div>
         </div>
+
+        {templateModalOpen && (
+          <TemplateModal
+            templates={templates}
+            onClose={() => setTemplateModalOpen(false)}
+            onCreate={handleCreateFromTemplate}
+          />
+        )}
 
         <div className="space-y-6">
           {calibrations.map((cal) => (
@@ -248,12 +337,16 @@ export default function DashboardPage() {
               expandedCandidateId={expandedCandidateByCalibrationId[cal.id] ?? null}
               uploading={uploadingCalibrationId === cal.id}
               deletingCandidateId={deletingCandidateId}
+              compareState={compareState?.calId === cal.id ? compareState : null}
               onUpload={(e) => onUpload(e, cal.id)}
               onDeleteJob={() => handleDelete(cal.id)}
               onCopy={() => handleCopyCalibration(cal)}
+              onSaveAsTemplate={() => handleSaveAsTemplate(cal.id)}
               onExpandCandidate={(candidateId) => setExpandedCandidate(cal.id, candidateId)}
               onCollapseCandidate={() => setExpandedCandidate(cal.id, null)}
               onDeleteCandidate={(candidateId) => onDeleteCandidate(cal.id, candidateId)}
+              onUpdateCandidate={(candidateId, update) => onUpdateCandidate(cal.id, candidateId, update)}
+              onCompareSelect={(id1, id2) => setCompareState(id1 && id2 ? { calId: cal.id, id1, id2 } : null)}
             />
           ))}
         </div>
@@ -291,33 +384,123 @@ export default function DashboardPage() {
   );
 }
 
+function TemplateModal({
+  templates,
+  onClose,
+  onCreate,
+}: {
+  templates: Calibration[];
+  onClose: () => void;
+  onCreate: (templateId: string, requisitionName: string) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [name, setName] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-lg">Create job from template</CardTitle>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+            ×
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {templates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No templates yet. Save a job as template from its card.</p>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Template</label>
+                <select
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={selectedId}
+                  onChange={(e) => {
+                    setSelectedId(e.target.value);
+                    const t = templates.find((x) => x.id === e.target.value);
+                    if (t) setName(t.requisition_name.replace(/^Template: /i, ""));
+                  }}
+                >
+                  <option value="">Select…</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.requisition_name} ({t.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Job title</label>
+                <input
+                  type="text"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  placeholder="e.g. Senior Data Engineer"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!selectedId || !name.trim()}
+                  onClick={() => onCreate(selectedId, name.trim())}
+                >
+                  Create job
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function JobCard({
   calibration,
   candidates,
   expandedCandidateId,
   uploading,
   deletingCandidateId,
+  compareState,
   onUpload,
   onDeleteJob,
   onCopy,
+  onSaveAsTemplate,
   onExpandCandidate,
   onCollapseCandidate,
   onDeleteCandidate,
+  onUpdateCandidate,
+  onCompareSelect,
 }: {
   calibration: Calibration;
   candidates: CandidateResult[];
   expandedCandidateId: string | null;
   uploading: boolean;
   deletingCandidateId: string | null;
+  compareState: { calId: string; id1: string; id2: string } | null;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDeleteJob: () => void;
   onCopy: () => void;
+  onSaveAsTemplate: () => void;
   onExpandCandidate: (candidateId: string) => void;
   onCollapseCandidate: () => void;
   onDeleteCandidate: (candidateId: string) => void;
+  onUpdateCandidate: (candidateId: string, update: { stage?: string; rating?: number; notes?: string }) => void;
+  onCompareSelect: (id1: string | null, id2: string | null) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [localNotes, setLocalNotes] = useState("");
   const expandedCandidate = expandedCandidateId ? candidates.find((c) => c.id === expandedCandidateId) ?? null : null;
+  useEffect(() => {
+    if (expandedCandidate) setLocalNotes(expandedCandidate.notes ?? "");
+  }, [expandedCandidate?.id, expandedCandidate?.notes]);
+  const stages = calibration.pipeline_stages?.length ? calibration.pipeline_stages : ["Applied", "Screening", "Interview", "Offer"];
+  const compareCandidates = compareState
+    ? [candidates.find((c) => c.id === compareState.id1), candidates.find((c) => c.id === compareState.id2)].filter(Boolean) as CandidateResult[]
+    : [];
 
   return (
     <Card className="overflow-hidden">
@@ -334,6 +517,9 @@ function JobCard({
             </Button>
             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={onCopy} aria-label="Make a copy">
               <Copy className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={onSaveAsTemplate} aria-label="Save as template">
+              <LayoutTemplate className="h-4 w-4" />
             </Button>
             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={onDeleteJob} aria-label="Delete job">
               <Trash2 className="h-4 w-4" />
@@ -368,7 +554,30 @@ function JobCard({
           <p className="border-b px-4 py-2 text-sm font-medium text-muted-foreground">
             Candidates ({candidates.length})
           </p>
-          {expandedCandidate ? (
+          {compareState && compareCandidates.length === 2 ? (
+            <div className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Compare candidates</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => onCompareSelect(null, null)}>
+                  Close compare
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {compareCandidates.map((c) => (
+                  <div key={c.id} className="rounded-lg border bg-background p-4">
+                    <p className="mb-1 font-medium">{getDisplayNameFromParsedText(c.parsed_text, c.name)}</p>
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      {c.stage ?? "Applied"}
+                      {c.rating != null ? ` · ${c.rating}/5` : ""}
+                    </p>
+                    <pre className="max-h-[40vh] overflow-auto text-xs whitespace-pre-wrap font-sans">
+                      {c.parsed_text || "(No text extracted)"}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : expandedCandidate ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onCollapseCandidate}>
@@ -396,6 +605,46 @@ function JobCard({
               <h3 className="font-medium">
                 {getDisplayNameFromParsedText(expandedCandidate.parsed_text, expandedCandidate.name)}
               </h3>
+              <div className="flex flex-wrap items-center gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Stage</label>
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-sm"
+                    value={expandedCandidate.stage ?? stages[0]}
+                    onChange={(e) => onUpdateCandidate(expandedCandidate.id, { stage: e.target.value })}
+                  >
+                    {stages.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Rating (1–5)</label>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        onClick={() => onUpdateCandidate(expandedCandidate.id, { rating: r })}
+                        aria-label={`${r} star`}
+                      >
+                        <Star className={`h-5 w-5 ${(expandedCandidate.rating ?? 0) >= r ? "fill-primary text-primary" : ""}`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (saved on blur)</label>
+                <textarea
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm min-h-[80px]"
+                  placeholder="Private notes…"
+                  value={localNotes}
+                  onChange={(e) => setLocalNotes(e.target.value)}
+                  onBlur={() => onUpdateCandidate(expandedCandidate.id, { notes: localNotes })}
+                />
+              </div>
               <pre className="max-h-[50vh] overflow-auto rounded-md border bg-background p-4 text-sm whitespace-pre-wrap font-sans">
                 {expandedCandidate.parsed_text || "(No text extracted)"}
               </pre>
@@ -410,6 +659,8 @@ function JobCard({
                 const displayName = getDisplayNameFromParsedText(c.parsed_text, c.name);
                 const initials = getInitialsFromName(displayName);
                 const isDeleting = deletingCandidateId === c.id;
+                const isCompareA = compareState?.id1 === c.id;
+                const isCompareB = compareState?.id2 === c.id;
                 return (
                   <li key={c.id}>
                     <div className="flex items-center gap-2 p-4">
@@ -423,10 +674,52 @@ function JobCard({
                         </div>
                         <div className="min-w-0 flex-1 text-left">
                           <p className="font-medium text-foreground truncate">{displayName}</p>
-                          <p className="text-xs text-muted-foreground">Click to view parsed text</p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.stage ?? stages[0]}
+                            {(c.rating ?? 0) > 0 && ` · ${c.rating}/5`}
+                          </p>
                         </div>
                         <FileTextIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       </button>
+                      <select
+                        className="rounded border bg-background px-2 py-1 text-xs w-28 shrink-0"
+                        value={c.stage ?? stages[0]}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          onUpdateCandidate(c.id, { stage: e.target.value });
+                        }}
+                      >
+                        {stages.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={`h-7 w-7 shrink-0 text-xs ${isCompareA ? "bg-primary text-primary-foreground" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCompareSelect(c.id, compareState?.id2 ?? null);
+                        }}
+                        title="Compare as A"
+                      >
+                        A
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={`h-7 w-7 shrink-0 text-xs ${isCompareB ? "bg-primary text-primary-foreground" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCompareSelect(compareState?.id1 ?? null, c.id);
+                        }}
+                        title="Compare as B"
+                      >
+                        B
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"

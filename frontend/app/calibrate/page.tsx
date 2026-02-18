@@ -264,6 +264,12 @@ export default function CalibratePage() {
             <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Dashboard
             </Link>
+            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Pipeline
+            </Link>
+            <Link href="/insights" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Insights
+            </Link>
           </nav>
         </div>
       </header>

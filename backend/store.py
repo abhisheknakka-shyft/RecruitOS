@@ -77,8 +77,17 @@ def get_calibration(calibration_id: Optional[str] = None) -> Optional[Calibratio
 
 
 def list_calibrations() -> list[Calibration]:
+    """List job postings (excludes templates)."""
     _ensure_loaded()
-    return sorted(_calibrations.values(), key=lambda c: c.created_at, reverse=True)
+    jobs = [c for c in _calibrations.values() if not getattr(c, "is_template", False)]
+    return sorted(jobs, key=lambda c: c.created_at, reverse=True)
+
+
+def list_templates() -> list[Calibration]:
+    """List job templates (for creating new jobs)."""
+    _ensure_loaded()
+    templates = [c for c in _calibrations.values() if getattr(c, "is_template", False)]
+    return sorted(templates, key=lambda c: c.created_at, reverse=True)
 
 
 def set_calibration(cal: Calibration) -> None:
@@ -113,13 +122,17 @@ def delete_calibration(calibration_id: str) -> bool:
     return True
 
 
-def _profile_to_result(p: CandidateProfile) -> CandidateResult:
+def _profile_to_result(p: CandidateProfile, first_stage: str = "Applied") -> CandidateResult:
     return CandidateResult(
         id=p.id,
         name=p.name,
         parsed_text=p.parsed_text,
         created_at=p.created_at,
         source_filename=p.source_filename,
+        stage=p.stage or first_stage,
+        rating=p.rating,
+        notes=p.notes,
+        ai_summary=p.ai_summary,
     )
 
 
@@ -128,8 +141,27 @@ def get_candidates(calibration_id: Optional[str] = None) -> list[CandidateResult
     cid = calibration_id or _active_calibration_id
     if not cid:
         return []
+    cal = _calibrations.get(cid)
+    stages = getattr(cal, "pipeline_stages", None) if cal else None
+    first_stage = (stages[0] if stages else "Applied")
     profiles = _candidates_by_calibration.get(cid, [])
-    return [_profile_to_result(p) for p in profiles]
+    return [_profile_to_result(p, first_stage) for p in profiles]
+
+
+def update_candidate(calibration_id: str, candidate_id: str, **kwargs: object) -> bool:
+    global _candidates_by_calibration
+    _ensure_loaded()
+    profiles = _candidates_by_calibration.get(calibration_id)
+    if not profiles:
+        return False
+    for p in profiles:
+        if p.id == candidate_id:
+            for key, value in kwargs.items():
+                if hasattr(p, key):
+                    setattr(p, key, value)
+            _save_to_disk()
+            return True
+    return False
 
 
 def add_candidates(calibration_id: str, profiles: list[CandidateProfile]) -> None:
