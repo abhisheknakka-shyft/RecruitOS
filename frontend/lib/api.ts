@@ -46,20 +46,10 @@ export interface Calibration extends CalibrationCreate {
   created_at: string;
 }
 
-export interface ScoringMetrics {
-  skill_relevance: number;
-  title_relevance: number;
-  work_relevance: number;
-  experience_relevance: number;
-}
-
 export interface CandidateResult {
+  id: string;
   name: string;
-  score: number;
-  relevant_skills: string[];
-  experience_years: number | null;
-  metrics: ScoringMetrics;
-  summary: string;
+  parsed_text: string;
 }
 
 export async function getCalibration(): Promise<Calibration | null> {
