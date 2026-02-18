@@ -139,13 +139,16 @@ export default function DashboardPage() {
     setUploading(true);
     setError(null);
     try {
-      await setActiveCalibration(targetId);
       const list = Array.from(files);
-      const next = await uploadResumes(list);
+      const next = await uploadResumes(list, targetId);
       if (selectedCalibrationId === targetId) setCandidates(next);
       setActiveCalibrationState(calibrations.find((c) => c.id === targetId) ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setError(message);
+      if (message.includes("not found") || message.includes("restarted")) {
+        fetchCalibrationsAndActive();
+      }
     } finally {
       uploadTargetCalibrationIdRef.current = null;
       setUploading(false);

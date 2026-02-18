@@ -115,13 +115,23 @@ export async function getCandidates(calibrationId?: string): Promise<CandidateRe
   return res.json();
 }
 
-export async function uploadResumes(files: File[]): Promise<CandidateResult[]> {
+export async function uploadResumes(files: File[], calibrationId?: string): Promise<CandidateResult[]> {
   const form = new FormData();
   files.forEach((f) => form.append("files", f));
-  const res = await wrapFetch(`${API}/api/upload`, { method: "POST", body: form });
+  const url = calibrationId
+    ? `${API}/api/upload?calibration_id=${encodeURIComponent(calibrationId)}`
+    : `${API}/api/upload`;
+  const res = await wrapFetch(url, { method: "POST", body: form });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(t || "Upload failed");
+    let msg = "Upload failed";
+    try {
+      const j = JSON.parse(t) as { detail?: string };
+      msg = typeof j.detail === "string" ? j.detail : msg;
+    } catch {
+      if (t) msg = t;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }
