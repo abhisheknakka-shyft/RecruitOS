@@ -1,4 +1,5 @@
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const FETCH_TIMEOUT_MS = 15_000;
 
 async function handleResponse(res: Response, context?: string): Promise<never> {
   const text = await res.text();
@@ -6,14 +7,27 @@ async function handleResponse(res: Response, context?: string): Promise<never> {
 }
 
 function wrapFetch(url: string, init?: RequestInit, context?: string): Promise<Response> {
-  return fetch(url, init).catch((err) => {
-    if (err instanceof TypeError && err.message === "Failed to fetch") {
-      throw new Error(
-        `Cannot reach the API at ${API}. Is the backend running? From the project root run: uvicorn backend.main:app --reload --host 0.0.0.0`
-      );
-    }
-    throw err;
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: controller.signal })
+    .then((res) => {
+      clearTimeout(timeoutId);
+      return res;
+    })
+    .catch((err) => {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") {
+        throw new Error(
+          `Request timed out. Is the backend running at ${API}? Start it with: uvicorn backend.main:app --reload --host 0.0.0.0`
+        );
+      }
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        throw new Error(
+          `Cannot reach the API at ${API}. Start the backend: uvicorn backend.main:app --reload --host 0.0.0.0`
+        );
+      }
+      throw err;
+    });
 }
 
 export interface CalibrationCreate {

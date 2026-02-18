@@ -4,6 +4,8 @@ Two-page app: **Calibrate** job requirements, then view a **Dashboard** leaderbo
 
 ## How to run
 
+**You must run both backend and frontend.** If Dashboard, Pipeline, or Insights stay on a loading spinner, the backend is not running or not reachable at `http://localhost:8000`. The app will show an error after ~15s if the API is down.
+
 **1. Backend (from project root)**
 
 ```bash
