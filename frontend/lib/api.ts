@@ -6,7 +6,7 @@ async function handleResponse(res: Response, context?: string): Promise<never> {
   throw new Error(text || res.statusText || `Request failed (${res.status})${context ? `: ${context}` : ""}`);
 }
 
-function wrapFetch(url: string, init?: RequestInit, context?: string): Promise<Response> {
+function wrapFetch(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   return fetch(url, { ...init, signal: controller.signal })
@@ -80,6 +80,43 @@ export interface CandidateUpdate {
   stage?: string;
   rating?: number;
   notes?: string;
+}
+
+export interface RankingSubMetric {
+  key: string;
+  label: string;
+  rating: number;
+  points_earned: number;
+  points_possible: number;
+  matched_terms: string[];
+  evidence: string[];
+  rationale: string;
+}
+
+export interface CandidateScoringState {
+  status: "pending" | "processing" | "completed" | "failed";
+  total_score: number | null;
+  experience_years: number | null;
+  summary: string;
+  matched_skills: string[];
+  matched_titles: string[];
+  matched_companies: string[];
+  matched_industries: string[];
+  matched_schools: string[];
+  matched_degrees: string[];
+  sub_metrics: RankingSubMetric[];
+  error?: string | null;
+  updated_at: string;
+}
+
+export interface RankedCandidateResult extends CandidateResult {
+  scoring: CandidateScoringState;
+}
+
+export interface RescoreResult {
+  queued: number;
+  calibration_id: string;
+  candidate_id?: string;
 }
 
 export async function getCalibration(): Promise<Calibration | null> {
@@ -167,6 +204,28 @@ export async function getCandidates(calibrationId?: string): Promise<CandidateRe
     ? `${API}/api/candidates?calibration_id=${encodeURIComponent(calibrationId)}`
     : `${API}/api/candidates`;
   const res = await wrapFetch(url);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function getCandidateRankings(calibrationId?: string): Promise<RankedCandidateResult[]> {
+  const url = calibrationId
+    ? `${API}/api/candidate-rankings?calibration_id=${encodeURIComponent(calibrationId)}`
+    : `${API}/api/candidate-rankings`;
+  const res = await wrapFetch(url);
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
+export async function rescoreCandidateRankings(
+  calibrationId: string,
+  candidateId?: string
+): Promise<RescoreResult> {
+  const res = await wrapFetch(`${API}/api/candidate-rankings/rescore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ calibration_id: calibrationId, candidate_id: candidateId }),
+  });
   if (!res.ok) await handleResponse(res);
   return res.json();
 }
