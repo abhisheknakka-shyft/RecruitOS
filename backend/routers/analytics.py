@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -7,7 +8,7 @@ from backend import store
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-def _in_month(dt: datetime | None, year: int, month: int) -> bool:
+def _in_month(dt: Optional[datetime], year: int, month: int) -> bool:
     if dt is None:
         return False
     return dt.year == year and dt.month == month
@@ -15,8 +16,8 @@ def _in_month(dt: datetime | None, year: int, month: int) -> bool:
 
 @router.get("/overview")
 def get_analytics_overview(
-    year: int | None = Query(None, description="Filter by application received year"),
-    month: int | None = Query(None, ge=1, le=12, description="Filter by application received month (1-12)"),
+    year: Optional[int] = Query(None, description="Filter by application received year"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Filter by application received month (1-12)"),
 ):
     """Aggregate pipeline metrics. Optionally filter by date of application received (candidate created_at)."""
     jobs = store.list_calibrations()
