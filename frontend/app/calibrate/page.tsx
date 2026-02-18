@@ -126,7 +126,7 @@ export default function CalibratePage() {
   }, []);
 
   useEffect(() => {
-    if (editId && calibrations.length >= 0) {
+    if (editId) {
       setSelectedId(editId);
       selectCalibration(editId);
     }
