@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { SkillsInput } from "@/components/SkillsInput";
 import { TagsInput } from "@/components/TagsInput";
 import {
   createCalibration,
+  updateCalibration,
   listCalibrations,
   getCalibrationById,
   setActiveCalibration,
@@ -88,6 +89,8 @@ function loadCalibrationIntoForm(
 
 export default function CalibratePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [calibrations, setCalibrations] = useState<Calibration[]>([]);
@@ -121,6 +124,14 @@ export default function CalibratePage() {
       .then(setCalibrations)
       .catch(() => setCalibrations([]));
   }, []);
+
+  useEffect(() => {
+    if (editId) {
+      setSelectedId(editId);
+      selectCalibration(editId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   const selectCalibration = async (id: string | null) => {
     setSelectedId(id);
@@ -218,10 +229,16 @@ export default function CalibratePage() {
         workplace_type: workplace_type || undefined,
         exclude_short_tenure: exclude_short_tenure,
       };
-      const created = await createCalibration(body);
-      setCalibrations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-      setSelectedId(created.id);
-      router.push("/dashboard");
+      if (selectedId) {
+        const updated = await updateCalibration(selectedId, body);
+        setCalibrations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        router.push("/dashboard");
+      } else {
+        const created = await createCalibration(body);
+        setCalibrations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+        setSelectedId(created.id);
+        router.push("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save calibration");
     } finally {
