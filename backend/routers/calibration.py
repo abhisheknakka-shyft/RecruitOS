@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from backend.models import Calibration, CalibrationCreate
@@ -12,11 +15,23 @@ class SetActiveBody(BaseModel):
 
 @router.post("/calibration", response_model=Calibration)
 def create_calibration(body: CalibrationCreate) -> Calibration:
-    import uuid
-    from datetime import datetime
     cal = Calibration(
         id=str(uuid.uuid4()),
         created_at=datetime.utcnow(),
+        **body.model_dump(),
+    )
+    store.set_calibration(cal)
+    return cal
+
+
+@router.patch("/calibration/{calibration_id}", response_model=Calibration)
+def update_calibration(calibration_id: str, body: CalibrationCreate) -> Calibration:
+    existing = store.get_calibration(calibration_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Calibration not found.")
+    cal = Calibration(
+        id=existing.id,
+        created_at=existing.created_at,
         **body.model_dump(),
     )
     store.set_calibration(cal)

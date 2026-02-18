@@ -14,7 +14,14 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, LayoutDashboard, FileText, Loader2, Plus, Trash2, ArrowLeft, User } from "lucide-react";
+import { Upload, LayoutDashboard, FileText, Loader2, Plus, Trash2, ArrowLeft, FileText as FileTextIcon } from "lucide-react";
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function DashboardPage() {
   const [calibrations, setCalibrations] = useState<Calibration[]>([]);
@@ -297,18 +304,22 @@ export default function DashboardPage() {
                   No candidates yet. Upload PDF resumes to see profiles and parsed text.
                 </p>
               ) : (
-                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <ul className="divide-y rounded-lg border bg-card">
                   {candidates.map((c) => (
                     <li key={c.id}>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                         onClick={() => setSelectedCandidateId(c.id)}
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                          <User className="h-5 w-5 text-primary" />
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                          {getInitials(c.name)}
                         </div>
-                        <span className="font-medium truncate">{c.name}</span>
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="font-medium text-foreground truncate">{c.name}</p>
+                          <p className="text-sm text-muted-foreground">Resume · Click to view parsed text</p>
+                        </div>
+                        <FileTextIcon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
                       </button>
                     </li>
                   ))}

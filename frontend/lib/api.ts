@@ -91,6 +91,16 @@ export async function createCalibration(body: CalibrationCreate): Promise<Calibr
   return res.json();
 }
 
+export async function updateCalibration(calibrationId: string, body: CalibrationCreate): Promise<Calibration> {
+  const res = await wrapFetch(`${API}/api/calibration/${calibrationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await handleResponse(res);
+  return res.json();
+}
+
 export async function deleteCalibration(calibrationId: string): Promise<void> {
   const res = await wrapFetch(`${API}/api/calibration/${calibrationId}`, { method: "DELETE" });
   if (!res.ok) await handleResponse(res);
