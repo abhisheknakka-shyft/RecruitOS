@@ -1,4 +1,4 @@
-# AutoRecruit – AI Recruitment Agent
+# RecruitOS – AI Recruitment Agent
 
 Two-page app: **Calibrate** job requirements, then view a **Dashboard** leaderboard of candidates scored by AI.
 
