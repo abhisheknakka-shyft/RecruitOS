@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -78,3 +78,47 @@ class CandidateUpdate(BaseModel):
     rating: Optional[int] = Field(None, ge=1, le=5)
     notes: Optional[str] = None
     ai_summary: Optional[str] = None
+
+
+class RankingSubMetric(BaseModel):
+    key: str
+    label: str
+    rating: int = Field(ge=1, le=5)
+    points_earned: int = Field(ge=0)
+    points_possible: int = Field(ge=1)
+    matched_terms: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    rationale: str = ""
+
+
+class RankingPayload(BaseModel):
+    total_score: int = Field(ge=0, le=100)
+    experience_years: Optional[float] = None
+    summary: str = ""
+    matched_skills: list[str] = Field(default_factory=list)
+    matched_titles: list[str] = Field(default_factory=list)
+    matched_companies: list[str] = Field(default_factory=list)
+    matched_industries: list[str] = Field(default_factory=list)
+    matched_schools: list[str] = Field(default_factory=list)
+    matched_degrees: list[str] = Field(default_factory=list)
+    sub_metrics: list[RankingSubMetric] = Field(default_factory=list)
+
+
+class CandidateScoringState(BaseModel):
+    status: Literal["pending", "processing", "completed", "failed"] = "pending"
+    total_score: Optional[int] = Field(default=None, ge=0, le=100)
+    experience_years: Optional[float] = None
+    summary: str = ""
+    matched_skills: list[str] = Field(default_factory=list)
+    matched_titles: list[str] = Field(default_factory=list)
+    matched_companies: list[str] = Field(default_factory=list)
+    matched_industries: list[str] = Field(default_factory=list)
+    matched_schools: list[str] = Field(default_factory=list)
+    matched_degrees: list[str] = Field(default_factory=list)
+    sub_metrics: list[RankingSubMetric] = Field(default_factory=list)
+    error: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RankedCandidateResult(CandidateResult):
+    scoring: CandidateScoringState = Field(default_factory=CandidateScoringState)

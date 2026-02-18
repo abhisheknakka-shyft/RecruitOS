@@ -3,10 +3,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
-from backend.models import CandidateProfile, CandidateResult, CandidateUpdate
+from pydantic import BaseModel
+
+from backend.models import CandidateProfile, CandidateResult, CandidateUpdate, RankedCandidateResult
 from backend import store
 from backend.parser import extract_text_from_pdf
 from backend.llm_providers import chat_completion
+from backend.scoring_tasks import queue_candidate_scoring, queue_calibration_rescore
 
 router = APIRouter()
 
@@ -18,6 +21,35 @@ def list_candidates(
     calibration_id: Optional[str] = Query(None, description="Calibration ID; defaults to active"),
 ) -> list[CandidateResult]:
     return store.get_candidates(calibration_id)
+
+
+@router.get("/candidate-rankings", response_model=list[RankedCandidateResult])
+def list_candidate_rankings(
+    calibration_id: Optional[str] = Query(None, description="Calibration ID; defaults to active"),
+) -> list[RankedCandidateResult]:
+    return store.get_ranked_candidates(calibration_id)
+
+
+class RescoreBody(BaseModel):
+    calibration_id: Optional[str] = None
+    candidate_id: Optional[str] = None
+
+
+@router.post("/candidate-rankings/rescore")
+async def rescore_candidate_rankings(body: RescoreBody) -> dict:
+    calibration = store.get_calibration(body.calibration_id) if body.calibration_id else store.get_calibration()
+    if calibration is None:
+        raise HTTPException(status_code=404, detail="Calibration not found.")
+
+    if body.candidate_id:
+        candidate = store.get_candidate_profile(calibration.id, body.candidate_id)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Candidate not found.")
+        queued = 1 if queue_candidate_scoring(calibration.id, body.candidate_id) else 0
+        return {"queued": queued, "calibration_id": calibration.id, "candidate_id": body.candidate_id}
+
+    queued = queue_calibration_rescore(calibration.id)
+    return {"queued": queued, "calibration_id": calibration.id}
 
 
 @router.post("/upload", response_model=list[CandidateResult])
@@ -57,6 +89,8 @@ async def upload_resumes(
             )
         )
     store.add_candidates(cal.id, profiles)
+    for p in profiles:
+        queue_candidate_scoring(cal.id, p.id)
     return store.get_candidates(cal.id)
 
 

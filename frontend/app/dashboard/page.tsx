@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   listCalibrations,
   listTemplates,
   getCandidates,
+  getCandidateRankings,
+  rescoreCandidateRankings,
   uploadResumes,
   deleteCalibration,
   deleteCandidate,
@@ -14,9 +16,13 @@ import {
   saveAsTemplate,
   type Calibration,
   type CandidateResult,
+  type RankedCandidateResult,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DotScale } from "@/components/DotScale";
+import { ScoreCircle } from "@/components/ScoreCircle";
 import {
   Upload,
   LayoutDashboard,
@@ -30,6 +36,9 @@ import {
   Copy,
   Star,
   LayoutTemplate,
+  Sparkles,
+  RefreshCw,
+  GripVertical,
 } from "lucide-react";
 import { createCalibration, type CalibrationCreate } from "@/lib/api";
 
@@ -51,9 +60,115 @@ function getInitialsFromName(name: string): string {
   return (a + b).toUpperCase().replace(/[^A-Z]/g, "") || "?";
 }
 
+function statusLabel(status: RankedCandidateResult["scoring"]["status"] | undefined): string {
+  if (status === "processing") return "Scoring";
+  if (status === "failed") return "Failed";
+  if (status === "completed") return "Scored";
+  return "Queued";
+}
+
+function statusClass(status: RankedCandidateResult["scoring"]["status"] | undefined): string {
+  if (status === "completed") return "bg-primary text-primary-foreground";
+  if (status === "failed") return "bg-destructive text-destructive-foreground";
+  if (status === "processing") return "bg-amber-500 text-white";
+  return "bg-muted text-muted-foreground";
+}
+
+type CandidateSortMode =
+  | "overall"
+  | "alphabetical"
+  | "experience_years"
+  | "skills"
+  | "titles"
+  | "work"
+  | "education"
+  | "experience"
+  | "context";
+
+const CANDIDATE_SORT_OPTIONS: Array<{ value: CandidateSortMode; label: string }> = [
+  { value: "overall", label: "Rank by overall score" },
+  { value: "skills", label: "Skill relevance score" },
+  { value: "titles", label: "Title relevance score" },
+  { value: "work", label: "Work relevance score" },
+  { value: "education", label: "School relevance score" },
+  { value: "experience", label: "Experience relevance score" },
+  { value: "context", label: "JD/Ideal relevance score" },
+  { value: "experience_years", label: "Years of experience" },
+  { value: "alphabetical", label: "Alphabetical" },
+];
+
+function getSubMetricPoints(
+  ranking: RankedCandidateResult | undefined,
+  key: "skills" | "titles" | "work" | "education" | "experience" | "context"
+): number {
+  const metric = ranking?.scoring?.sub_metrics?.find((m) => m.key === key);
+  return metric?.points_earned ?? -1;
+}
+
+function CondensedScoreCard({ ranking }: { ranking: RankedCandidateResult | undefined }) {
+  if (!ranking) {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Scoring not available</p>
+        <p className="text-xs text-muted-foreground">No ranking payload found for this candidate yet.</p>
+      </div>
+    );
+  }
+
+  if (ranking.scoring.status !== "completed") {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{statusLabel(ranking.scoring.status)}</p>
+        <p className="text-xs text-muted-foreground">
+          {ranking.scoring.status === "failed"
+            ? ranking.scoring.error || "Scoring failed."
+            : "Scoring is running asynchronously."}
+        </p>
+      </div>
+    );
+  }
+
+  const subMetrics = Array.isArray(ranking.scoring.sub_metrics) ? ranking.scoring.sub_metrics : [];
+  const matchedSkills = Array.isArray(ranking.scoring.matched_skills) ? ranking.scoring.matched_skills : [];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">Candidate Match</p>
+        <span className="text-sm font-semibold text-primary">{ranking.scoring.total_score ?? 0}%</span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {ranking.scoring.experience_years != null
+          ? `${ranking.scoring.experience_years} yrs exp detected`
+          : "Experience not confidently detected"}
+      </p>
+      <div className="space-y-2">
+        {subMetrics.slice(0, 4).map((metric) => (
+          <div key={metric.key} className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium">{metric.label}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {metric.points_earned}/{metric.points_possible}
+              </p>
+            </div>
+            <DotScale rating={metric.rating} />
+          </div>
+        ))}
+      </div>
+      {matchedSkills.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          Skills: {matchedSkills.slice(0, 4).join(", ")}
+          {matchedSkills.length > 4 ? "..." : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [calibrations, setCalibrations] = useState<Calibration[]>([]);
   const [candidatesByCalibrationId, setCandidatesByCalibrationId] = useState<Record<string, CandidateResult[]>>({});
+  const [rankingsByCalibrationId, setRankingsByCalibrationId] = useState<Record<string, RankedCandidateResult[]>>({});
   const [expandedCandidateByCalibrationId, setExpandedCandidateByCalibrationId] = useState<Record<string, string | null>>({});
   const [uploadingCalibrationId, setUploadingCalibrationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,7 +177,6 @@ export default function DashboardPage() {
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Calibration[]>([]);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [compareState, setCompareState] = useState<{ calId: string; id1: string; id2: string } | null>(null);
 
   const fetchCalibrations = async () => {
     try {
@@ -84,22 +198,56 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchRankingsForCalibration = useCallback(async (calibrationId: string, silent = false) => {
+    try {
+      const rankings = await getCandidateRankings(calibrationId);
+      setRankingsByCalibrationId((prev) => ({ ...prev, [calibrationId]: rankings }));
+    } catch (err) {
+      setRankingsByCalibrationId((prev) => ({ ...prev, [calibrationId]: [] }));
+      if (!silent) throw err;
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const list = await fetchCalibrations();
-      await Promise.all(list.map((c) => fetchCandidatesForCalibration(c.id)));
+      await Promise.all(
+        list.map(async (c) => {
+          await Promise.all([fetchCandidatesForCalibration(c.id), fetchRankingsForCalibration(c.id, true)]);
+        })
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchRankingsForCalibration]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  const inFlightCalibrationIds = useMemo(() => {
+    return calibrations
+      .map((c) => c.id)
+      .filter((id) =>
+        (rankingsByCalibrationId[id] ?? []).some(
+          (r) => r.scoring.status === "pending" || r.scoring.status === "processing"
+        )
+      );
+  }, [calibrations, rankingsByCalibrationId]);
+
+  useEffect(() => {
+    if (inFlightCalibrationIds.length === 0) return;
+    const timer = setInterval(() => {
+      inFlightCalibrationIds.forEach((id) => {
+        fetchRankingsForCalibration(id, true).catch(() => {});
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [inFlightCalibrationIds, fetchRankingsForCalibration]);
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>, calibrationId: string) => {
     const files = e.target.files;
@@ -110,10 +258,11 @@ export default function DashboardPage() {
       const list = Array.from(files);
       const next = await uploadResumes(list, calibrationId);
       setCandidatesByCalibrationId((prev) => ({ ...prev, [calibrationId]: next }));
+      await fetchRankingsForCalibration(calibrationId, true);
       const name = calibrations.find((c) => c.id === calibrationId)?.requisition_name ?? "Job";
       setSuccessMessage(
-        next.length > 0
-          ? `${next.length} resume${next.length === 1 ? "" : "s"} added to ${name}`
+        list.length > 0
+          ? `${list.length} resume${list.length === 1 ? "" : "s"} queued for scoring in ${name}`
           : "No new resumes added (only PDFs under 15MB are accepted)"
       );
       setTimeout(() => setSuccessMessage(null), 4000);
@@ -142,11 +291,12 @@ export default function DashboardPage() {
         ...prev,
         [calibrationId]: (prev[calibrationId] ?? []).filter((c) => c.id !== candidateId),
       }));
+      setRankingsByCalibrationId((prev) => ({
+        ...prev,
+        [calibrationId]: (prev[calibrationId] ?? []).filter((c) => c.id !== candidateId),
+      }));
       setExpandedCandidateByCalibrationId((prev) =>
         prev[calibrationId] === candidateId ? { ...prev, [calibrationId]: null } : prev
-      );
-      setCompareState((prev) =>
-        prev?.calId === calibrationId && (prev.id1 === candidateId || prev.id2 === candidateId) ? null : prev
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove resume");
@@ -167,8 +317,40 @@ export default function DashboardPage() {
         ...prev,
         [calibrationId]: (prev[calibrationId] ?? []).map((c) => (c.id === candidateId ? updated : c)),
       }));
+      setRankingsByCalibrationId((prev) => ({
+        ...prev,
+        [calibrationId]: (prev[calibrationId] ?? []).map((c) =>
+          c.id === candidateId ? { ...c, stage: updated.stage, rating: updated.rating, notes: updated.notes } : c
+        ),
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update");
+    }
+  };
+
+  const onRescoreAllCandidates = async (calibrationId: string) => {
+    setError(null);
+    try {
+      const result = await rescoreCandidateRankings(calibrationId);
+      await fetchRankingsForCalibration(calibrationId, true);
+      setSuccessMessage(
+        result.queued > 0
+          ? `Queued ${result.queued} candidate${result.queued === 1 ? "" : "s"} for rescoring.`
+          : "Rescore requested. Candidates may already be processing."
+      );
+      setTimeout(() => setSuccessMessage(null), 3500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rescore");
+    }
+  };
+
+  const onRescoreCandidate = async (calibrationId: string, candidateId: string) => {
+    setError(null);
+    try {
+      await rescoreCandidateRankings(calibrationId, candidateId);
+      await fetchRankingsForCalibration(calibrationId, true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rescore candidate");
     }
   };
 
@@ -178,6 +360,7 @@ export default function DashboardPage() {
       const created = await createFromTemplate(templateId, requisitionName || undefined);
       setCalibrations((prev) => [created, ...prev]);
       setCandidatesByCalibrationId((prev) => ({ ...prev, [created.id]: [] }));
+      setRankingsByCalibrationId((prev) => ({ ...prev, [created.id]: [] }));
       setTemplateModalOpen(false);
       setSuccessMessage(`Job "${created.requisition_name}" created from template`);
       setTimeout(() => setSuccessMessage(null), 4000);
@@ -204,8 +387,13 @@ export default function DashboardPage() {
     setError(null);
     try {
       await deleteCalibration(id);
-      const list = await fetchCalibrations();
+      await fetchCalibrations();
       setCandidatesByCalibrationId((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setRankingsByCalibrationId((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -250,6 +438,7 @@ export default function DashboardPage() {
       const created = await createCalibration(body);
       setCalibrations((prev) => [created, ...prev]);
       setCandidatesByCalibrationId((prev) => ({ ...prev, [created.id]: [] }));
+      setRankingsByCalibrationId((prev) => ({ ...prev, [created.id]: [] }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to copy");
     }
@@ -334,10 +523,10 @@ export default function DashboardPage() {
               key={cal.id}
               calibration={cal}
               candidates={candidatesByCalibrationId[cal.id] ?? []}
+              rankings={rankingsByCalibrationId[cal.id] ?? []}
               expandedCandidateId={expandedCandidateByCalibrationId[cal.id] ?? null}
               uploading={uploadingCalibrationId === cal.id}
               deletingCandidateId={deletingCandidateId}
-              compareState={compareState?.calId === cal.id ? compareState : null}
               onUpload={(e) => onUpload(e, cal.id)}
               onDeleteJob={() => handleDelete(cal.id)}
               onCopy={() => handleCopyCalibration(cal)}
@@ -346,7 +535,8 @@ export default function DashboardPage() {
               onCollapseCandidate={() => setExpandedCandidate(cal.id, null)}
               onDeleteCandidate={(candidateId) => onDeleteCandidate(cal.id, candidateId)}
               onUpdateCandidate={(candidateId, update) => onUpdateCandidate(cal.id, candidateId, update)}
-              onCompareSelect={(id1, id2) => setCompareState(id1 && id2 ? { calId: cal.id, id1, id2 } : null)}
+              onRescoreAll={() => onRescoreAllCandidates(cal.id)}
+              onRescoreCandidate={(candidateId) => onRescoreCandidate(cal.id, candidateId)}
             />
           ))}
         </div>
@@ -378,7 +568,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
-
       </main>
     </div>
   );
@@ -461,10 +650,10 @@ function TemplateModal({
 function JobCard({
   calibration,
   candidates,
+  rankings,
   expandedCandidateId,
   uploading,
   deletingCandidateId,
-  compareState,
   onUpload,
   onDeleteJob,
   onCopy,
@@ -473,14 +662,15 @@ function JobCard({
   onCollapseCandidate,
   onDeleteCandidate,
   onUpdateCandidate,
-  onCompareSelect,
+  onRescoreAll,
+  onRescoreCandidate,
 }: {
   calibration: Calibration;
   candidates: CandidateResult[];
+  rankings: RankedCandidateResult[];
   expandedCandidateId: string | null;
   uploading: boolean;
   deletingCandidateId: string | null;
-  compareState: { calId: string; id1: string; id2: string } | null;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDeleteJob: () => void;
   onCopy: () => void;
@@ -489,26 +679,207 @@ function JobCard({
   onCollapseCandidate: () => void;
   onDeleteCandidate: (candidateId: string) => void;
   onUpdateCandidate: (candidateId: string, update: { stage?: string; rating?: number; notes?: string }) => void;
-  onCompareSelect: (id1: string | null, id2: string | null) => void;
+  onRescoreAll: () => Promise<void>;
+  onRescoreCandidate: (candidateId: string) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localNotes, setLocalNotes] = useState("");
-  const expandedCandidate = expandedCandidateId ? candidates.find((c) => c.id === expandedCandidateId) ?? null : null;
+  const [rescoringAll, setRescoringAll] = useState(false);
+  const [rescoringCandidateId, setRescoringCandidateId] = useState<string | null>(null);
+  const [hoveredScoreCandidateId, setHoveredScoreCandidateId] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<CandidateSortMode>("overall");
+  const [manualOverride, setManualOverride] = useState(false);
+  const [manualOrder, setManualOrder] = useState<string[]>([]);
+  const [draggedCandidateId, setDraggedCandidateId] = useState<string | null>(null);
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const rankingByCandidateId = useMemo(() => {
+    return new Map(rankings.map((r) => [r.id, r]));
+  }, [rankings]);
+
+  useEffect(() => {
+    try {
+      const savedSort = localStorage.getItem(`recruitos:dashboard:sort:${calibration.id}`);
+      if (savedSort) {
+        // Backward compatibility with previous sort keys.
+        if (savedSort === "score") setSortMode("overall");
+        else if (savedSort === "alpha") setSortMode("alphabetical");
+        else if (CANDIDATE_SORT_OPTIONS.some((opt) => opt.value === savedSort)) setSortMode(savedSort as CandidateSortMode);
+      }
+      const savedManualOverride = localStorage.getItem(`recruitos:dashboard:manual-override:${calibration.id}`);
+      setManualOverride(savedManualOverride === "1");
+      const savedOrder = localStorage.getItem(`recruitos:dashboard:manual-order:${calibration.id}`);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as string[];
+        if (Array.isArray(parsed)) setManualOrder(parsed.filter((x): x is string => typeof x === "string"));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [calibration.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`recruitos:dashboard:sort:${calibration.id}`, sortMode);
+    } catch {
+      // ignore storage errors
+    }
+  }, [calibration.id, sortMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`recruitos:dashboard:manual-override:${calibration.id}`, manualOverride ? "1" : "0");
+    } catch {
+      // ignore storage errors
+    }
+  }, [calibration.id, manualOverride]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`recruitos:dashboard:manual-order:${calibration.id}`, JSON.stringify(manualOrder));
+    } catch {
+      // ignore storage errors
+    }
+  }, [calibration.id, manualOrder]);
+
+  useEffect(() => {
+    const ids = candidates.map((c) => c.id);
+    setManualOrder((prev) => {
+      const seen = new Set<string>();
+      const existing: string[] = [];
+      for (const id of prev) {
+        if (ids.includes(id) && !seen.has(id)) {
+          seen.add(id);
+          existing.push(id);
+        }
+      }
+      const appended = ids.filter((id) => !seen.has(id));
+      return [...existing, ...appended];
+    });
+  }, [candidates]);
+
+  const candidateById = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates]);
+
+  const sortedBySelectedSort = useMemo(() => {
+    if (sortMode === "alphabetical") {
+      return [...candidates].sort((a, b) =>
+        getDisplayNameFromParsedText(a.parsed_text, a.name).localeCompare(
+          getDisplayNameFromParsedText(b.parsed_text, b.name)
+        )
+      );
+    }
+
+    const scoreOf = (candidate: CandidateResult): number => {
+      const ranking = rankingByCandidateId.get(candidate.id);
+      if (!ranking) return -1;
+      if (sortMode === "overall") return ranking.scoring.total_score ?? -1;
+      if (sortMode === "experience_years") return ranking.scoring.experience_years ?? -1;
+      return getSubMetricPoints(ranking, sortMode);
+    };
+
+    return [...candidates].sort((a, b) => {
+      const aScore = scoreOf(a);
+      const bScore = scoreOf(b);
+      if (aScore !== bScore) return bScore - aScore;
+      const overallA = rankingByCandidateId.get(a.id)?.scoring.total_score ?? -1;
+      const overallB = rankingByCandidateId.get(b.id)?.scoring.total_score ?? -1;
+      if (overallA !== overallB) return overallB - overallA;
+      return getDisplayNameFromParsedText(a.parsed_text, a.name).localeCompare(
+        getDisplayNameFromParsedText(b.parsed_text, b.name)
+      );
+    });
+  }, [candidates, rankingByCandidateId, sortMode]);
+
+  const sortedCandidates = useMemo(() => {
+    if (!manualOverride) return sortedBySelectedSort;
+    const seen = new Set<string>();
+    const ordered = manualOrder
+      .map((id) => candidateById.get(id))
+      .filter((candidate): candidate is CandidateResult => Boolean(candidate))
+      .filter((candidate) => {
+        if (seen.has(candidate.id)) return false;
+        seen.add(candidate.id);
+        return true;
+      });
+    const missing = sortedBySelectedSort.filter((candidate) => !seen.has(candidate.id));
+    return [...ordered, ...missing];
+  }, [manualOverride, sortedBySelectedSort, manualOrder, candidateById]);
+
+  const expandedCandidate = expandedCandidateId
+    ? sortedCandidates.find((c) => c.id === expandedCandidateId) ?? null
+    : null;
+  const expandedRanking = expandedCandidate ? rankingByCandidateId.get(expandedCandidate.id) ?? null : null;
+
   useEffect(() => {
     if (expandedCandidate) setLocalNotes(expandedCandidate.notes ?? "");
-  }, [expandedCandidate?.id, expandedCandidate?.notes]);
-  const stages = calibration.pipeline_stages?.length ? calibration.pipeline_stages : ["Applied", "Screening", "Interview", "Offer"];
-  const compareCandidates = compareState
-    ? [candidates.find((c) => c.id === compareState.id1), candidates.find((c) => c.id === compareState.id2)].filter(Boolean) as CandidateResult[]
-    : [];
+  }, [expandedCandidate]);
+
+  const stages = calibration.pipeline_stages?.length
+    ? calibration.pipeline_stages
+    : ["Applied", "Screening", "Interview", "Offer"];
+
+  const scoringCounts = {
+    completed: rankings.filter((r) => r.scoring?.status === "completed").length,
+    processing: rankings.filter((r) => r.scoring?.status === "processing" || r.scoring?.status === "pending").length,
+    failed: rankings.filter((r) => r.scoring?.status === "failed").length,
+  };
+
+  const runRescoreAll = async () => {
+    setRescoringAll(true);
+    try {
+      await onRescoreAll();
+    } finally {
+      setRescoringAll(false);
+    }
+  };
+
+  const runRescoreCandidate = async (candidateId: string) => {
+    setRescoringCandidateId(candidateId);
+    try {
+      await onRescoreCandidate(candidateId);
+    } finally {
+      setRescoringCandidateId(null);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
+    };
+  }, []);
+
+  const openScorePopover = (candidateId: string) => {
+    if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
+    setHoveredScoreCandidateId(candidateId);
+  };
+
+  const closeScorePopover = (candidateId: string) => {
+    if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = setTimeout(() => {
+      setHoveredScoreCandidateId((prev) => (prev === candidateId ? null : prev));
+    }, 120);
+  };
+
+  const onDropCandidate = (targetId: string) => {
+    if (!draggedCandidateId || draggedCandidateId === targetId) return;
+    const currentOrderIds = sortedCandidates.map((candidate) => candidate.id);
+    const next = currentOrderIds.filter((id) => id !== draggedCandidateId);
+    const targetIndex = next.indexOf(targetId);
+    if (targetIndex < 0) {
+      next.push(draggedCandidateId);
+    } else {
+      next.splice(targetIndex, 0, draggedCandidateId);
+    }
+    setManualOrder(next);
+    setManualOverride(true);
+    setDraggedCandidateId(null);
+  };
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-medium leading-tight">
-            {calibration.requisition_name}
-          </CardTitle>
+          <CardTitle className="text-base font-medium leading-tight">{calibration.requisition_name}</CardTitle>
           <div className="flex shrink-0 items-center gap-0">
             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
               <Link href={`/calibrate?edit=${encodeURIComponent(calibration.id)}`} aria-label="Edit">
@@ -529,15 +900,8 @@ function JobCard({
         <p className="text-sm text-muted-foreground">{calibration.role}</p>
       </CardHeader>
       <CardContent className="pt-0">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          multiple
-          className="hidden"
-          onChange={onUpload}
-        />
-        <div className="mb-4 flex flex-wrap gap-2">
+        <input ref={fileInputRef} type="file" accept=".pdf" multiple className="hidden" onChange={onUpload} />
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -549,40 +913,75 @@ function JobCard({
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             Upload resumes
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={runRescoreAll}
+            disabled={rescoringAll || candidates.length === 0}
+          >
+            {rescoringAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Rescore all
+          </Button>
+          <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+            {scoringCounts.completed} scored · {scoringCounts.processing} processing
+            {scoringCounts.failed ? ` · ${scoringCounts.failed} failed` : ""}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="text-xs font-medium text-muted-foreground">Sort</label>
+            <select
+              value={sortMode}
+              onChange={(e) => {
+                setSortMode(e.target.value as CandidateSortMode);
+                setManualOverride(false);
+              }}
+              className="h-8 rounded border bg-background px-2 text-xs"
+            >
+              {CANDIDATE_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="hidden text-xs text-muted-foreground sm:inline">Drag candidates anytime to reorder</span>
+            {manualOverride && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                onClick={() => setManualOverride(false)}
+              >
+                Use selected sort
+              </Button>
+            )}
+          </div>
         </div>
+
         <div className="rounded-lg border bg-muted/30">
-          <p className="border-b px-4 py-2 text-sm font-medium text-muted-foreground">
-            Candidates ({candidates.length})
-          </p>
-          {compareState && compareCandidates.length === 2 ? (
-            <div className="space-y-4 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Compare candidates</span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => onCompareSelect(null, null)}>
-                  Close compare
-                </Button>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {compareCandidates.map((c) => (
-                  <div key={c.id} className="rounded-lg border bg-background p-4">
-                    <p className="mb-1 font-medium">{getDisplayNameFromParsedText(c.parsed_text, c.name)}</p>
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      {c.stage ?? "Applied"}
-                      {c.rating != null ? ` · ${c.rating}/5` : ""}
-                    </p>
-                    <pre className="max-h-[40vh] overflow-auto text-xs whitespace-pre-wrap font-sans">
-                      {c.parsed_text || "(No text extracted)"}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : expandedCandidate ? (
+          <p className="border-b px-4 py-2 text-sm font-medium text-muted-foreground">Candidates ({candidates.length})</p>
+          {expandedCandidate ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onCollapseCandidate}>
                   <ArrowLeft className="h-4 w-4" />
                   Back to list
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={rescoringCandidateId === expandedCandidate.id}
+                  onClick={() => runRescoreCandidate(expandedCandidate.id)}
+                >
+                  {rescoringCandidateId === expandedCandidate.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Rescore candidate
                 </Button>
                 <Button
                   type="button"
@@ -602,9 +1001,15 @@ function JobCard({
                   Remove resume
                 </Button>
               </div>
-              <h3 className="font-medium">
-                {getDisplayNameFromParsedText(expandedCandidate.parsed_text, expandedCandidate.name)}
-              </h3>
+
+              <h3 className="font-medium">{getDisplayNameFromParsedText(expandedCandidate.parsed_text, expandedCandidate.name)}</h3>
+
+              {expandedRanking && (
+                <p className="text-xs text-muted-foreground">
+                  Hover the score badge in the candidate list for condensed scoring details.
+                </p>
+              )}
+
               <div className="flex flex-wrap items-center gap-4">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">Stage</label>
@@ -614,7 +1019,9 @@ function JobCard({
                     onChange={(e) => onUpdateCandidate(expandedCandidate.id, { stage: e.target.value })}
                   >
                     {stages.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -635,54 +1042,96 @@ function JobCard({
                   </div>
                 </div>
               </div>
+
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (saved on blur)</label>
                 <textarea
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm min-h-[80px]"
+                  className="min-h-[80px] w-full rounded-md border bg-background px-3 py-2 text-sm"
                   placeholder="Private notes…"
                   value={localNotes}
                   onChange={(e) => setLocalNotes(e.target.value)}
                   onBlur={() => onUpdateCandidate(expandedCandidate.id, { notes: localNotes })}
                 />
               </div>
+
               <pre className="max-h-[50vh] overflow-auto rounded-md border bg-background p-4 text-sm whitespace-pre-wrap font-sans">
                 {expandedCandidate.parsed_text || "(No text extracted)"}
               </pre>
             </div>
           ) : candidates.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              No resumes yet. Upload PDFs above.
-            </p>
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">No resumes yet. Upload PDFs above.</p>
           ) : (
             <ul className="divide-y">
-              {candidates.map((c) => {
+              {sortedCandidates.map((c) => {
                 const displayName = getDisplayNameFromParsedText(c.parsed_text, c.name);
                 const initials = getInitialsFromName(displayName);
                 const isDeleting = deletingCandidateId === c.id;
-                const isCompareA = compareState?.id1 === c.id;
-                const isCompareB = compareState?.id2 === c.id;
+                const ranking = rankingByCandidateId.get(c.id);
+                const score = ranking?.scoring.total_score;
                 return (
-                  <li key={c.id}>
+                  <li
+                    key={c.id}
+                    draggable
+                    onDragStart={() => setDraggedCandidateId(c.id)}
+                    onDragEnd={() => setDraggedCandidateId(null)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      onDropCandidate(c.id);
+                    }}
+                    className={draggedCandidateId === c.id ? "opacity-60" : ""}
+                  >
                     <div className="flex items-center gap-2 p-4">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
+                        <GripVertical className="h-4 w-4" />
+                      </span>
                       <button
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-4 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-md p-2 -m-2"
+                        className="-m-2 flex min-w-0 flex-1 items-center gap-4 rounded-md p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                         onClick={() => onExpandCandidate(c.id)}
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1 text-left">
-                          <p className="font-medium text-foreground truncate">{displayName}</p>
+                          <p className="truncate font-medium text-foreground">{displayName}</p>
                           <p className="text-xs text-muted-foreground">
                             {c.stage ?? stages[0]}
                             {(c.rating ?? 0) > 0 && ` · ${c.rating}/5`}
                           </p>
                         </div>
+                        <Popover open={hoveredScoreCandidateId === c.id}>
+                          <PopoverTrigger asChild>
+                            <div
+                              className="shrink-0"
+                              onMouseEnter={() => openScorePopover(c.id)}
+                              onMouseLeave={() => closeScorePopover(c.id)}
+                            >
+                              {score != null ? (
+                                <ScoreCircle score={score} size={44} />
+                              ) : (
+                                <span className={`rounded px-2 py-0.5 text-xs ${statusClass(ranking?.scoring.status)}`}>
+                                  {statusLabel(ranking?.scoring.status)}
+                                </span>
+                              )}
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-64"
+                            side="top"
+                            align="end"
+                            onMouseEnter={() => openScorePopover(c.id)}
+                            onMouseLeave={() => closeScorePopover(c.id)}
+                          >
+                            <CondensedScoreCard ranking={ranking} />
+                          </PopoverContent>
+                        </Popover>
                         <FileTextIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       </button>
                       <select
-                        className="rounded border bg-background px-2 py-1 text-xs w-28 shrink-0"
+                        className="w-28 shrink-0 rounded border bg-background px-2 py-1 text-xs"
                         value={c.stage ?? stages[0]}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
@@ -691,35 +1140,11 @@ function JobCard({
                         }}
                       >
                         {stages.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
                         ))}
                       </select>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={`h-7 w-7 shrink-0 text-xs ${isCompareA ? "bg-primary text-primary-foreground" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCompareSelect(c.id, compareState?.id2 ?? null);
-                        }}
-                        title="Compare as A"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={`h-7 w-7 shrink-0 text-xs ${isCompareB ? "bg-primary text-primary-foreground" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCompareSelect(compareState?.id1 ?? null, c.id);
-                        }}
-                        title="Compare as B"
-                      >
-                        B
-                      </Button>
                       <Button
                         type="button"
                         variant="ghost"

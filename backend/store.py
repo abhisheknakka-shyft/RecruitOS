@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from backend.models import Calibration, CandidateProfile, CandidateResult
+from backend.models import (
+    Calibration,
+    CandidateProfile,
+    CandidateResult,
+    CandidateScoringState,
+    RankedCandidateResult,
+    RankingPayload,
+)
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 _DATA_FILE = _DATA_DIR / "recruitos_data.json"
@@ -12,6 +20,7 @@ _DATA_FILE = _DATA_DIR / "recruitos_data.json"
 _calibrations: dict[str, Calibration] = {}
 _active_calibration_id: Optional[str] = None
 _candidates_by_calibration: dict[str, list[CandidateProfile]] = {}
+_scores_by_calibration: dict[str, dict[str, CandidateScoringState]] = {}
 _loaded = False
 
 
@@ -24,7 +33,7 @@ def _ensure_loaded() -> None:
 
 
 def _load_from_disk() -> None:
-    global _calibrations, _active_calibration_id, _candidates_by_calibration
+    global _calibrations, _active_calibration_id, _candidates_by_calibration, _scores_by_calibration
     if not _DATA_FILE.exists():
         return
     try:
@@ -52,6 +61,19 @@ def _load_from_disk() -> None:
             except Exception:
                 continue
         _candidates_by_calibration[cid] = out
+    score_raw = raw.get("scores_by_calibration") or {}
+    _scores_by_calibration = {}
+    for cid, score_map in score_raw.items():
+        if cid not in _calibrations:
+            continue
+        parsed_map: dict[str, CandidateScoringState] = {}
+        if isinstance(score_map, dict):
+            for candidate_id, score_obj in score_map.items():
+                try:
+                    parsed_map[candidate_id] = CandidateScoringState.model_validate(score_obj)
+                except Exception:
+                    continue
+        _scores_by_calibration[cid] = parsed_map
 
 
 def _save_to_disk() -> None:
@@ -62,6 +84,10 @@ def _save_to_disk() -> None:
         "candidates_by_calibration": {
             cid: [p.model_dump(mode="json") for p in profiles]
             for cid, profiles in _candidates_by_calibration.items()
+        },
+        "scores_by_calibration": {
+            cid: {candidate_id: score.model_dump(mode="json") for candidate_id, score in score_map.items()}
+            for cid, score_map in _scores_by_calibration.items()
         },
     }
     _DATA_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -109,12 +135,13 @@ def set_active_calibration(calibration_id: str) -> bool:
 
 
 def delete_calibration(calibration_id: str) -> bool:
-    global _calibrations, _active_calibration_id, _candidates_by_calibration
+    global _calibrations, _active_calibration_id, _candidates_by_calibration, _scores_by_calibration
     _ensure_loaded()
     if calibration_id not in _calibrations:
         return False
     del _calibrations[calibration_id]
     _candidates_by_calibration.pop(calibration_id, None)
+    _scores_by_calibration.pop(calibration_id, None)
     if _active_calibration_id == calibration_id:
         remaining = list(_calibrations.keys())
         _active_calibration_id = remaining[0] if remaining else None
@@ -148,6 +175,40 @@ def get_candidates(calibration_id: Optional[str] = None) -> list[CandidateResult
     return [_profile_to_result(p, first_stage) for p in profiles]
 
 
+def get_ranked_candidates(calibration_id: Optional[str] = None) -> list[RankedCandidateResult]:
+    _ensure_loaded()
+    cid = calibration_id or _active_calibration_id
+    if not cid:
+        return []
+    candidates = get_candidates(cid)
+    score_map = _scores_by_calibration.setdefault(cid, {})
+    dirty = False
+    merged: list[RankedCandidateResult] = []
+    for candidate in candidates:
+        scoring = score_map.get(candidate.id)
+        if scoring is None:
+            scoring = CandidateScoringState(status="pending", summary="Awaiting scoring.")
+            score_map[candidate.id] = scoring
+            dirty = True
+        merged.append(
+            RankedCandidateResult(
+                **candidate.model_dump(),
+                scoring=scoring,
+            )
+        )
+    if dirty:
+        _save_to_disk()
+    status_rank = {"completed": 0, "processing": 1, "pending": 2, "failed": 3}
+    merged.sort(
+        key=lambda c: (
+            status_rank.get(c.scoring.status, 9),
+            -(c.scoring.total_score or -1),
+            c.name.lower(),
+        )
+    )
+    return merged
+
+
 def update_candidate(calibration_id: str, candidate_id: str, **kwargs: object) -> bool:
     global _candidates_by_calibration
     _ensure_loaded()
@@ -165,11 +226,14 @@ def update_candidate(calibration_id: str, candidate_id: str, **kwargs: object) -
 
 
 def add_candidates(calibration_id: str, profiles: list[CandidateProfile]) -> None:
-    global _candidates_by_calibration
+    global _candidates_by_calibration, _scores_by_calibration
     _ensure_loaded()
     if calibration_id not in _candidates_by_calibration:
         _candidates_by_calibration[calibration_id] = []
     _candidates_by_calibration[calibration_id].extend(profiles)
+    score_map = _scores_by_calibration.setdefault(calibration_id, {})
+    for profile in profiles:
+        score_map[profile.id] = CandidateScoringState(status="pending", summary="Queued for scoring.")
     _save_to_disk()
 
 
@@ -182,16 +246,84 @@ def delete_candidate(calibration_id: str, candidate_id: str) -> bool:
     for i, p in enumerate(profiles):
         if p.id == candidate_id:
             profiles.pop(i)
+            score_map = _scores_by_calibration.get(calibration_id)
+            if score_map:
+                score_map.pop(candidate_id, None)
             _save_to_disk()
             return True
     return False
 
 
 def clear_candidates(calibration_id: Optional[str] = None) -> None:
-    global _candidates_by_calibration
+    global _candidates_by_calibration, _scores_by_calibration
     _ensure_loaded()
     if calibration_id:
         _candidates_by_calibration.pop(calibration_id, None)
+        _scores_by_calibration.pop(calibration_id, None)
     else:
         _candidates_by_calibration.clear()
+        _scores_by_calibration.clear()
+    _save_to_disk()
+
+
+def get_candidate_profile(calibration_id: str, candidate_id: str) -> Optional[CandidateProfile]:
+    _ensure_loaded()
+    profiles = _candidates_by_calibration.get(calibration_id) or []
+    return next((p for p in profiles if p.id == candidate_id), None)
+
+
+def list_candidate_ids(calibration_id: str) -> list[str]:
+    _ensure_loaded()
+    profiles = _candidates_by_calibration.get(calibration_id) or []
+    return [p.id for p in profiles]
+
+
+def mark_candidate_scoring(calibration_id: str, candidate_id: str) -> None:
+    _ensure_loaded()
+    score_map = _scores_by_calibration.setdefault(calibration_id, {})
+    current = score_map.get(candidate_id) or CandidateScoringState(status="pending")
+    score_map[candidate_id] = current.model_copy(
+        update={
+            "status": "processing",
+            "error": None,
+            "summary": "Scoring in progress.",
+            "updated_at": datetime.utcnow(),
+        }
+    )
+    _save_to_disk()
+
+
+def set_candidate_score(calibration_id: str, candidate_id: str, payload: RankingPayload) -> None:
+    _ensure_loaded()
+    score_map = _scores_by_calibration.setdefault(calibration_id, {})
+    score_map[candidate_id] = CandidateScoringState(
+        status="completed",
+        total_score=payload.total_score,
+        experience_years=payload.experience_years,
+        summary=payload.summary,
+        matched_skills=payload.matched_skills,
+        matched_titles=payload.matched_titles,
+        matched_companies=payload.matched_companies,
+        matched_industries=payload.matched_industries,
+        matched_schools=payload.matched_schools,
+        matched_degrees=payload.matched_degrees,
+        sub_metrics=payload.sub_metrics,
+        error=None,
+        updated_at=datetime.utcnow(),
+    )
+    _save_to_disk()
+
+
+def mark_candidate_scoring_failed(calibration_id: str, candidate_id: str, error: str) -> None:
+    _ensure_loaded()
+    score_map = _scores_by_calibration.setdefault(calibration_id, {})
+    current = score_map.get(candidate_id) or CandidateScoringState(status="pending")
+    score_map[candidate_id] = current.model_copy(
+        update={
+            "status": "failed",
+            "error": error or "Unknown scoring error.",
+            "summary": "Scoring failed.",
+            "updated_at": datetime.utcnow(),
+        }
+    )
     _save_to_disk()
