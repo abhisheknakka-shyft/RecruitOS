@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 export const dynamic = "force-dynamic";
 
 export default function CalibrateLayout({
@@ -5,5 +7,9 @@ export default function CalibrateLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-muted/30">Loading…</div>}>
+      {children}
+    </Suspense>
+  );
 }
