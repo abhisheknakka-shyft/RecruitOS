@@ -32,6 +32,13 @@ class CalibrationCreate(BaseModel):
     exclude_short_tenure: str = "none"  # none | 6months | 1year | 2years
     pipeline_stages: list[str] = Field(default_factory=lambda: list(DEFAULT_PIPELINE_STAGES))
     is_template: bool = False
+    # Optional scoring weights (0–100 each). If all None, backend uses defaults. Weights are normalized to sum 100.
+    scoring_weight_skills: Optional[int] = Field(None, ge=0, le=100)
+    scoring_weight_titles: Optional[int] = Field(None, ge=0, le=100)
+    scoring_weight_work: Optional[int] = Field(None, ge=0, le=100)
+    scoring_weight_education: Optional[int] = Field(None, ge=0, le=100)
+    scoring_weight_experience: Optional[int] = Field(None, ge=0, le=100)
+    scoring_weight_context: Optional[int] = Field(None, ge=0, le=100)
 
 
 class Calibration(CalibrationCreate):

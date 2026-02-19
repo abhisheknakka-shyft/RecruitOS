@@ -55,6 +55,13 @@ export interface CalibrationCreate {
   exclude_short_tenure?: string;
   pipeline_stages?: string[];
   is_template?: boolean;
+  /** Scoring weights 0–100 per dimension. If all omitted, backend uses defaults. Weights normalized to sum 100. */
+  scoring_weight_skills?: number | null;
+  scoring_weight_titles?: number | null;
+  scoring_weight_work?: number | null;
+  scoring_weight_education?: number | null;
+  scoring_weight_experience?: number | null;
+  scoring_weight_context?: number | null;
 }
 
 export interface Calibration extends CalibrationCreate {

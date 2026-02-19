@@ -20,10 +20,10 @@ import {
   type CalibrationCreate,
   type Calibration,
 } from "@/lib/api";
-import { Briefcase, Plus, ChevronDown, ChevronRight, Info, Loader2 } from "lucide-react";
+import { Briefcase, Plus, ChevronDown, ChevronRight, Info, Loader2, Bell, Share2, Download, FileText } from "lucide-react";
 
 const inputClassName =
-  "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
+  "flex w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
 
 const SENIORITY_OPTIONS = ["Entry", "Mid-Level", "Senior", "Manager", "Director", "Vice President", "CXO"];
 const DEGREE_OPTIONS = ["Certificate", "Bachelors", "Masters", "Doctorate"];
@@ -37,6 +37,15 @@ const EXCLUDE_TENURE_OPTIONS = [
 
 const CURRENT_YEAR = new Date().getFullYear();
 const GRAD_YEARS = Array.from({ length: 30 }, (_, i) => CURRENT_YEAR - i);
+
+const DEFAULT_SCORING_WEIGHTS = {
+  skills: 28,
+  titles: 18,
+  work: 16,
+  education: 10,
+  experience: 16,
+  context: 12,
+} as const;
 
 function loadCalibrationIntoForm(
   cal: Calibration,
@@ -61,6 +70,7 @@ function loadCalibrationIntoForm(
     setRelocation_allowed: (b: boolean) => void;
     setWorkplace_type: (s: string) => void;
     setExclude_short_tenure: (s: string) => void;
+    setScoringWeights: (w: Record<keyof typeof DEFAULT_SCORING_WEIGHTS, number>) => void;
   }
 ) {
   const c = cal as unknown as Record<string, unknown>;
@@ -88,6 +98,15 @@ function loadCalibrationIntoForm(
   setters.setRelocation_allowed((c.relocation_allowed as boolean) ?? false);
   setters.setWorkplace_type((c.workplace_type as string) ?? "");
   setters.setExclude_short_tenure((c.exclude_short_tenure as string) ?? "none");
+  const w = {
+    skills: (c.scoring_weight_skills as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.skills,
+    titles: (c.scoring_weight_titles as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.titles,
+    work: (c.scoring_weight_work as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.work,
+    education: (c.scoring_weight_education as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.education,
+    experience: (c.scoring_weight_experience as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.experience,
+    context: (c.scoring_weight_context as number | undefined) ?? DEFAULT_SCORING_WEIGHTS.context,
+  };
+  setters.setScoringWeights(w);
 }
 
 export default function CalibratePage() {
@@ -121,7 +140,11 @@ export default function CalibratePage() {
   const [expandedExperience, setExpandedExperience] = useState(true);
   const [expandedEducation, setExpandedEducation] = useState(true);
   const [expandedAdvanced, setExpandedAdvanced] = useState(true);
+  const [expandedScoringWeights, setExpandedScoringWeights] = useState(false);
   const [loadingCalibration, setLoadingCalibration] = useState(false);
+  const [scoringWeights, setScoringWeights] = useState<Record<keyof typeof DEFAULT_SCORING_WEIGHTS, number>>({
+    ...DEFAULT_SCORING_WEIGHTS,
+  });
 
   useEffect(() => {
     listCalibrations()
@@ -153,6 +176,7 @@ export default function CalibratePage() {
       setRelocation_allowed(false);
       setWorkplace_type("");
       setExclude_short_tenure("none");
+      setScoringWeights({ ...DEFAULT_SCORING_WEIGHTS });
       return;
     }
     setLoadingCalibration(true);
@@ -181,6 +205,7 @@ export default function CalibratePage() {
           setRelocation_allowed,
           setWorkplace_type,
           setExclude_short_tenure,
+          setScoringWeights,
         });
       }
     } catch {
@@ -235,6 +260,12 @@ export default function CalibratePage() {
         relocation_allowed: relocation_allowed,
         workplace_type: workplace_type || undefined,
         exclude_short_tenure: exclude_short_tenure,
+        scoring_weight_skills: scoringWeights.skills,
+        scoring_weight_titles: scoringWeights.titles,
+        scoring_weight_work: scoringWeights.work,
+        scoring_weight_education: scoringWeights.education,
+        scoring_weight_experience: scoringWeights.experience,
+        scoring_weight_context: scoringWeights.context,
       };
       if (selectedId) {
         const updated = await updateCalibration(selectedId, body);
@@ -259,43 +290,57 @@ export default function CalibratePage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="sticky top-0 z-10 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+      <header className="sticky top-0 z-10 border-b border-border bg-header-bg backdrop-blur-md">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <Link href="/" className="font-semibold text-primary">
+          <Link href="/" className="text-xl font-semibold text-primary">
             RecruitOS
           </Link>
-          <nav className="flex gap-5">
-            <Link href="/calibrate" className="text-sm font-medium text-primary underline underline-offset-4">
+          <nav className="flex gap-4">
+            <Link href="/calibrate" className="text-lg font-medium text-primary underline underline-offset-4">
               Calibrate
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Link href="/dashboard" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Dashboard
             </Link>
-            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Link href="/pipeline" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Pipeline
             </Link>
-            <Link href="/insights" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Link href="/insights" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Insights
             </Link>
           </nav>
+          <div className="flex items-center gap-2">
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Notifications">
+              <Bell className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Share">
+              <Share2 className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Download">
+              <Download className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Report">
+              <FileText className="h-6 w-6" />
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto max-w-3xl px-4 py-8">
-        <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <nav className="mb-6 flex items-center gap-2 text-base text-muted-foreground">
           <Link href="/" className="transition-colors hover:text-foreground">Home</Link>
           <span aria-hidden>/</span>
           <span className="font-medium text-foreground">{breadcrumbLabel}</span>
         </nav>
-        <h1 className="text-2xl font-semibold tracking-tight">Calibration</h1>
-        <p className="mb-8 mt-1 text-sm text-muted-foreground">
+        <h1 className="text-3xl font-semibold tracking-tight">Calibration</h1>
+        <p className="mb-8 mt-1 text-base text-muted-foreground">
           Job requirements as agreed with the hiring manager.
         </p>
 
         {calibrations.length > 0 && (
           <Card className="mb-8 border-border/80 shadow-sm">
             <CardContent className="pt-6">
-              <Label className="mb-3 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Requisition</Label>
+              <Label className="mb-3 block text-sm font-medium uppercase tracking-wide text-muted-foreground">Requisition</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -328,7 +373,7 @@ export default function CalibratePage() {
         <form onSubmit={handleSubmit} className="relative space-y-8">
           {loadingCalibration && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/80 backdrop-blur-[2px]" aria-live="polite">
-              <div className="flex items-center gap-2 rounded-lg bg-muted/90 px-4 py-3 text-sm font-medium text-muted-foreground shadow-sm">
+              <div className="flex items-center gap-2 rounded-lg bg-muted/90 px-4 py-3 text-base font-medium text-muted-foreground shadow-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading calibration…
               </div>
@@ -336,7 +381,7 @@ export default function CalibratePage() {
           )}
           <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Who do you want to hire?</CardTitle>
+              <CardTitle className="text-lg font-semibold">Who do you want to hire?</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -399,8 +444,8 @@ export default function CalibratePage() {
 
           <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Who is your ideal candidate?</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <CardTitle className="text-lg font-semibold">Who is your ideal candidate?</CardTitle>
+              <p className="mt-1 text-base text-muted-foreground">
                 Candidates you have hired before, given offer to, or would hire in the future.
               </p>
             </CardHeader>
@@ -419,7 +464,7 @@ export default function CalibratePage() {
 
           <Card className="border-border/80 shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Refine your Requirements</CardTitle>
+              <CardTitle className="text-lg font-semibold">Refine your Requirements</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -450,7 +495,7 @@ export default function CalibratePage() {
                             checked={seniority_levels.includes(s)}
                             onCheckedChange={() => toggleSeniority(s)}
                           />
-                          <span className="text-sm">{s}</span>
+                          <span className="text-base">{s}</span>
                         </label>
                       ))}
                     </div>
@@ -465,7 +510,7 @@ export default function CalibratePage() {
                           checked={years_experience_type === "total"}
                           onChange={() => setYears_experience_type("total")}
                         />
-                        <span className="text-sm">Total Years</span>
+                        <span className="text-base">Total Years</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -474,10 +519,10 @@ export default function CalibratePage() {
                           checked={years_experience_type === "relevant"}
                           onChange={() => setYears_experience_type("relevant")}
                         />
-                        <span className="text-sm">Years Relevant to this Requisition</span>
+                        <span className="text-base">Years Relevant to this Requisition</span>
                       </label>
                     </div>
-                    <p className="text-sm text-muted-foreground">{experienceRange[0]} – {experienceRange[1]}{experienceRange[1] >= 30 ? "+" : ""}</p>
+                    <p className="text-base text-muted-foreground">{experienceRange[0]} – {experienceRange[1]}{experienceRange[1] >= 30 ? "+" : ""}</p>
                     <Slider
                       min={0}
                       max={30}
@@ -517,7 +562,7 @@ export default function CalibratePage() {
                     <div className="space-y-2">
                       <Label>Graduation Year (from)</Label>
                       <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={graduation_year_min ?? ""}
                         onChange={(e) => setGraduation_year_min(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -530,7 +575,7 @@ export default function CalibratePage() {
                     <div className="space-y-2">
                       <Label>Graduation Year (to)</Label>
                       <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={graduation_year_max ?? ""}
                         onChange={(e) => setGraduation_year_max(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -582,7 +627,7 @@ export default function CalibratePage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-1">Exclude short tenures</Label>
-                    <p className="text-xs text-muted-foreground">Average tenure of the most recent 3 requisitions.</p>
+                    <p className="text-base text-muted-foreground">Average tenure of the most recent 3 requisitions.</p>
                     <div className="flex flex-wrap gap-4">
                       {EXCLUDE_TENURE_OPTIONS.map((o) => (
                         <label key={o.value} className="flex items-center gap-2">
@@ -599,11 +644,68 @@ export default function CalibratePage() {
                   </div>
                 </div>
               </details>
+
+              <details open={expandedScoringWeights} className="group">
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExpandedScoringWeights((prev) => !prev);
+                  }}
+                >
+                  {expandedScoringWeights ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                  Scoring weights
+                </summary>
+                <div className="space-y-4 pl-6 pt-2">
+                  <p className="text-base text-muted-foreground">
+                    Control how much each dimension affects the candidate score (0–100 each). Weights are normalized to sum 100. Defaults: Skills 28, Title 18, Work 16, Education 10, Experience 16, Context 12.
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(
+                      [
+                        { key: "skills" as const, label: "Skills relevance" },
+                        { key: "titles" as const, label: "Title relevance" },
+                        { key: "work" as const, label: "Work relevance" },
+                        { key: "education" as const, label: "Education relevance" },
+                        { key: "experience" as const, label: "Experience relevance" },
+                        { key: "context" as const, label: "JD / ideal candidate relevance" },
+                      ] as const
+                    ).map(({ key, label }) => (
+                      <div key={key} className="space-y-1.5">
+                        <Label htmlFor={`weight-${key}`} className="text-base">{label}</Label>
+                        <Input
+                          id={`weight-${key}`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={scoringWeights[key]}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? 0 : Math.min(100, Math.max(0, Number(e.target.value)));
+                            setScoringWeights((prev) => ({ ...prev, [key]: v }));
+                          }}
+                          className="w-24"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Total: {Object.values(scoringWeights).reduce((a, b) => a + b, 0)} (backend normalizes to 100)
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setScoringWeights({ ...DEFAULT_SCORING_WEIGHTS })}
+                  >
+                    Reset to default
+                  </Button>
+                </div>
+              </details>
             </CardContent>
           </Card>
 
           {error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-base text-destructive">
               {error}
             </div>
           )}

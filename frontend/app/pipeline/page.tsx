@@ -28,6 +28,10 @@ import {
   Loader2,
   Star,
   CheckSquare,
+  Bell,
+  Share2,
+  Download,
+  FileText,
   ClipboardList,
   Phone,
   Gift,
@@ -198,41 +202,55 @@ export default function PipelinePage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-10 border-b border-border bg-header-bg backdrop-blur-md">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <Link href="/" className="font-semibold text-primary">
+          <Link href="/" className="text-xl font-semibold text-primary">
             RecruitOS
           </Link>
           <nav className="flex gap-4">
-            <Link href="/calibrate" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/calibrate" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Calibrate
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/dashboard" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Dashboard
             </Link>
-            <Link href="/pipeline" className="text-sm font-medium text-primary underline">
+            <Link href="/pipeline" className="text-lg font-medium text-primary underline underline-offset-4">
               Pipeline
             </Link>
-            <Link href="/insights" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/insights" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Insights
             </Link>
           </nav>
+          <div className="flex items-center gap-2">
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Notifications">
+              <Bell className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Share">
+              <Share2 className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Download">
+              <Download className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Report">
+              <FileText className="h-6 w-6" />
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-6 flex items-center gap-2">
           <Kanban className="h-6 w-6" />
-          <h1 className="text-2xl font-semibold">Track applications</h1>
+          <h1 className="text-3xl font-semibold">Track applications</h1>
         </div>
-        <p className="mb-6 text-sm text-muted-foreground">
+        <p className="mb-6 text-base text-muted-foreground">
           See where each candidate is. Drag cards between columns or use <strong>Move to →</strong> to change stage.
         </p>
 
         {error && (
           <Card className="mb-6 border-destructive/50 bg-destructive/5">
             <CardContent className="pt-6">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-base text-destructive">{error}</p>
             </CardContent>
           </Card>
         )}
@@ -260,8 +278,8 @@ export default function PipelinePage() {
                 return (
                   <div key={job.id}>
                     <div className="mb-4">
-                      <h2 className="text-xl font-semibold text-foreground">{job.requisition_name}</h2>
-                      <p className="text-sm text-muted-foreground">{job.role}</p>
+                      <h2 className="text-2xl font-semibold text-foreground">{job.requisition_name}</h2>
+                      <p className="text-base text-muted-foreground">{job.role}</p>
                     </div>
                     <div className="flex gap-4 overflow-x-auto pb-2">
                       {stages.map((stage) => {
@@ -276,7 +294,7 @@ export default function PipelinePage() {
                               <div className="flex items-center gap-2">
                                 {style.icon}
                                 <span className="font-semibold">{stage}</span>
-                                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+                                <span className="rounded-full bg-white/20 px-2 py-0.5 text-sm font-medium">
                                   {list.length}
                                 </span>
                               </div>
@@ -301,7 +319,7 @@ export default function PipelinePage() {
                                 />
                               ))}
                               <div className="rounded-xl border-2 border-dashed border-muted-foreground/20 bg-white/50 py-6 dark:bg-black/5">
-                                <p className="text-center text-xs text-muted-foreground">Add candidate via Dashboard</p>
+                                <p className="text-center text-sm text-muted-foreground">Add candidate via Dashboard</p>
                               </div>
                             </DroppableColumn>
                           </div>
@@ -327,12 +345,12 @@ export default function PipelinePage() {
                 return (
                   <div className={`cursor-grabbing rounded-xl border border-border/80 bg-white py-4 pl-4 pr-3 shadow-xl dark:bg-card opacity-95 rotate-2 scale-105 border-t-4 ${style.border}`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-base font-semibold text-muted-foreground">
                         {getInitials(cand.name)}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground">{cand.name}</p>
-                        <p className="text-xs text-muted-foreground">Resume</p>
+                        <p className="text-sm text-muted-foreground">Resume</p>
                       </div>
                       <GripVertical className="h-4 w-4 text-muted-foreground" />
                     </div>
@@ -410,16 +428,16 @@ function CandidateKanbanCard({
       className={`group relative rounded-xl border border-border/80 bg-white py-4 pl-4 pr-3 shadow-md transition-all hover:shadow-lg dark:bg-card ${stageBorderColor} border-t-4`}
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-base font-semibold text-muted-foreground">
           {getInitials(candidate.name)}
         </div>
         {dragHandle && <div className="shrink-0">{dragHandle}</div>}
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">{candidate.name}</p>
-          <p className="text-xs text-muted-foreground">Resume</p>
+          <p className="text-sm text-muted-foreground">Resume</p>
           {(candidate.rating ?? 0) > 0 && (
             <div className="mt-2">
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                 <Star className="h-3 w-3 fill-current" />
                 {candidate.rating}/5
               </span>
@@ -431,7 +449,7 @@ function CandidateKanbanCard({
         <div className="relative">
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/80 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/80 py-2 text-base font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => setMoveOpen(!moveOpen)}
             aria-label="Move to stage"
           >
@@ -452,7 +470,7 @@ function CandidateKanbanCard({
                   <button
                     key={s}
                     type="button"
-                    className="w-full px-3 py-2.5 text-left text-sm hover:bg-muted"
+                    className="w-full px-3 py-2.5 text-left text-base hover:bg-muted"
                     onClick={() => {
                       onMove(s);
                       setMoveOpen(false);

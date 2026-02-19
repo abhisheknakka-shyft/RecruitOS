@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
 
+from backend.llm_providers import get_provider, score_resume_with_gemini, score_resume_with_openrouter
 from backend.models import RankingPayload, RankingSubMetric
 
 
@@ -15,7 +16,7 @@ class MetricSpec:
     weight: int
 
 
-METRICS: list[MetricSpec] = [
+DEFAULT_METRICS: list[MetricSpec] = [
     MetricSpec("skills", "Skill Relevance", 28),
     MetricSpec("titles", "Title Relevance", 18),
     MetricSpec("work", "Work Relevance", 16),
@@ -25,7 +26,57 @@ METRICS: list[MetricSpec] = [
 ]
 
 
+def _get_metrics(calibration: dict) -> list[MetricSpec]:
+    """Use calibration scoring weights if any are set; otherwise default metrics. Weights normalized to sum 100."""
+    keys = ["skills", "titles", "work", "education", "experience", "context"]
+    weight_keys = [
+        "scoring_weight_skills",
+        "scoring_weight_titles",
+        "scoring_weight_work",
+        "scoring_weight_education",
+        "scoring_weight_experience",
+        "scoring_weight_context",
+    ]
+    labels = [
+        "Skill Relevance",
+        "Title Relevance",
+        "Work Relevance",
+        "School Relevance",
+        "Experience Relevance",
+        "JD/Ideal Candidate Relevance",
+    ]
+    raw = [calibration.get(wk) for wk in weight_keys]
+    if all(v is None for v in raw):
+        return DEFAULT_METRICS
+    values = [int(v) if v is not None else 0 for v in raw]
+    total = sum(values)
+    if total <= 0:
+        return DEFAULT_METRICS
+    # Normalize to sum 100
+    normalized = [max(0, min(100, int(round(100 * v / total)))) for v in values]
+    # Ensure sum is exactly 100 (rounding may leave 99 or 101)
+    diff = 100 - sum(normalized)
+    if diff != 0 and normalized:
+        idx = 0
+        for i in range(1, len(normalized)):
+            if normalized[i] > normalized[idx]:
+                idx = i
+        normalized[idx] = max(0, normalized[idx] + diff)
+    return [MetricSpec(keys[i], labels[i], normalized[i]) for i in range(6)]
+
+
 def score_resume(calibration: dict, resume_text: str) -> RankingPayload:
+    # When using Gemini or OpenRouter, score with full parsed resume (no truncation); fall back to rule-based on failure.
+    provider = get_provider()
+    if (resume_text or "").strip():
+        if provider == "gemini":
+            payload = score_resume_with_gemini(calibration, resume_text)
+        elif provider == "openrouter":
+            payload = score_resume_with_openrouter(calibration, resume_text)
+        else:
+            payload = None
+        if payload is not None:
+            return payload
     chunks = _chunk_text(resume_text)
     role = str(calibration.get("role") or "").strip()
     skills = _clean_terms(calibration.get("skills", []))
@@ -77,9 +128,10 @@ def score_resume(calibration: dict, resume_text: str) -> RankingPayload:
         "context": context_terms[:4],
     }
 
+    metrics = _get_metrics(calibration)
     total_points = 0
     sub_metrics: list[RankingSubMetric] = []
-    for spec in METRICS:
+    for spec in metrics:
         rating = ratings[spec.key]
         earned = int(round((rating / 5) * spec.weight))
         total_points += earned
@@ -237,22 +289,108 @@ def _retrieve_evidence(chunks: list[str], terms: list[str], key: str) -> list[st
     return snippets
 
 
+def _parse_month(s: str) -> int:
+    """Return 1-12 for month name or number, else 0."""
+    s = (s or "").strip()[:3].lower()
+    months = "jan feb mar apr may jun jul aug sep oct nov dec".split()
+    if s in months:
+        return months.index(s) + 1
+    try:
+        m = int(s)
+        return m if 1 <= m <= 12 else 0
+    except ValueError:
+        return 0
+
+
+def _extract_experience_section(text: str) -> str | None:
+    """
+    Extract the work experience section only (exclude education). Returns None if no clear section.
+    """
+    lower = text.lower()
+    start_markers = ["experience", "work experience", "employment", "professional experience", "career"]
+    end_markers = ["education", "academic", "skills", "certifications", "projects", "summary", "objective", "references"]
+    start_idx = -1
+    for m in start_markers:
+        i = lower.find(m)
+        if i >= 0 and (start_idx < 0 or i < start_idx):
+            start_idx = i
+    if start_idx < 0:
+        return None
+    end_idx = len(text)
+    for m in end_markers:
+        i = lower.find(m, start_idx + 10)
+        if i >= 0 and i < end_idx:
+            end_idx = i
+    return text[start_idx:end_idx]
+
+
+def _infer_years_from_date_ranges(text: str) -> float | None:
+    """
+    Infer total years of experience from employment date ranges when resume
+    does not state "X years of experience". Handles e.g. "Jan 2022 – Dec 2023", "Jun 2021– Dec 2021".
+    Counts only ranges in the experience section when detectable (excludes education).
+    """
+    import datetime
+    section = _extract_experience_section(text)
+    search_text = (section if section else text).lower()
+    # Match: Month YYYY – Month YYYY or Month YYYY - Month YYYY (various dashes/spacing)
+    pattern = (
+        r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{4})\s*[–\-—]\s*"
+        r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{4})"
+    )
+    total_months = 0.0
+    for m in re.finditer(pattern, search_text, re.IGNORECASE):
+        y1, y2 = int(m.group(1)), int(m.group(2))
+        if y1 > 2100 or y2 > 2100 or y1 < 1990 or y2 < 1990:
+            continue
+        full = m.group(0)
+        parts = re.split(r"[–\-—]", full, maxsplit=1)
+        start_part = (parts[0] if parts else "").strip()
+        end_part = (parts[1] if len(parts) > 1 else "").strip()
+        mon1 = _parse_month(re.match(r"[a-z]+", start_part, re.I).group(0) if re.match(r"[a-z]+", start_part, re.I) else "")
+        mon2 = _parse_month(re.match(r"[a-z]+", end_part, re.I).group(0) if re.match(r"[a-z]+", end_part, re.I) else "")
+        if mon1 == 0:
+            mon1 = 1
+        if mon2 == 0:
+            mon2 = 12
+        try:
+            d1 = datetime.date(y1, mon1, 1)
+            d2 = datetime.date(y2, mon2, 1)
+            if d2 >= d1:
+                total_months += (d2.year - d1.year) * 12 + (d2.month - d1.month) + 1
+        except (ValueError, TypeError):
+            total_months += max(0, (y2 - y1) * 12)
+    if total_months <= 0:
+        return None
+    return round(total_months / 12.0, 1)
+
+
 def _score_experience(chunks: list[str], calibration: dict) -> tuple[float | None, list[str], int]:
-    text = " ".join(chunks).lower()
+    text = " ".join(chunks)
+    text_lower = text.lower()
+    inferred = _infer_years_from_date_ranges(text_lower)
     values: list[float] = []
     for pattern in [
         r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*(?:years|year|yrs|yr)\b",
         r"over\s+(\d{1,2}(?:\.\d+)?)\s*(?:years|year)\b",
         r"(\d{1,2}(?:\.\d+)?)\s*(?:years|year)\s+of\s+experience",
     ]:
-        for match in re.findall(pattern, text):
+        for match in re.findall(pattern, text_lower):
             try:
                 v = float(match)
             except ValueError:
                 continue
             if 0 <= v <= 60:
                 values.append(v)
-    exp_years = max(values) if values else None
+    explicit = max(values) if values else None
+    if explicit is not None and inferred is not None and explicit > inferred + 3:
+        exp_years = inferred
+    elif explicit is not None:
+        exp_years = explicit
+    elif inferred is not None and 0 <= inferred <= 60:
+        exp_years = inferred
+    else:
+        exp_years = None
     lo = _to_int(calibration.get("years_experience_min"), 0)
     hi = _to_int(calibration.get("years_experience_max"), 30)
     if lo > hi:

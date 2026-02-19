@@ -111,49 +111,49 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-10 border-b border-border bg-header-bg backdrop-blur-md">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <Link href="/" className="font-semibold text-primary">
+          <Link href="/" className="text-xl font-semibold text-primary">
             RecruitOS
           </Link>
           <nav className="flex gap-4">
             <Link
               href="/calibrate"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              className="text-lg font-medium text-muted-foreground hover:text-foreground"
             >
               Calibrate
             </Link>
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              className="text-lg font-medium text-muted-foreground hover:text-foreground"
             >
               Dashboard
             </Link>
             <Link
               href="/pipeline"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              className="text-lg font-medium text-muted-foreground hover:text-foreground"
             >
               Pipeline
             </Link>
             <Link
               href="/insights"
-              className="text-sm font-medium text-primary underline"
+              className="text-lg font-medium text-primary underline underline-offset-4"
             >
               Insights
             </Link>
           </nav>
           <div className="flex items-center gap-2">
             <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Notifications">
-              <Bell className="h-4 w-4" />
+              <Bell className="h-6 w-6" />
             </button>
             <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Share">
-              <Share2 className="h-4 w-4" />
+              <Share2 className="h-6 w-6" />
             </button>
             <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Download">
-              <Download className="h-4 w-4" />
+              <Download className="h-6 w-6" />
             </button>
             <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Report">
-              <FileText className="h-4 w-4" />
+              <FileText className="h-6 w-6" />
             </button>
           </div>
         </div>
@@ -162,13 +162,13 @@ export default function InsightsPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-6 flex items-center gap-2">
           <BarChart3 className="h-6 w-6" />
-          <h1 className="text-2xl font-semibold">Overview – Hires</h1>
+          <h1 className="text-3xl font-semibold">Overview – Hires</h1>
         </div>
 
         {error && (
           <Card className="mb-6 border-destructive/50 bg-destructive/5">
             <CardContent className="pt-6">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-base text-destructive">{error}</p>
             </CardContent>
           </Card>
         )}
@@ -178,9 +178,9 @@ export default function InsightsPage() {
             <h2 className="text-sm font-medium text-muted-foreground">At a Glance</h2>
             <span className="text-muted-foreground">·</span>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Date of application received:</span>
+              <span className="text-sm text-muted-foreground">Date of application received:</span>
               <select
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                className="rounded-md border border-input bg-background px-2 py-1.5 text-base"
                 value={filterYear}
                 onChange={(e) => setFilterYear(e.target.value === "" ? "" : Number(e.target.value))}
                 aria-label="Filter by year"
@@ -193,7 +193,7 @@ export default function InsightsPage() {
                 ))}
               </select>
               <select
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                className="rounded-md border border-input bg-background px-2 py-1.5 text-base"
                 value={filterMonth}
                 onChange={(e) => setFilterMonth(e.target.value === "" ? "" : Number(e.target.value))}
                 aria-label="Filter by month"
@@ -209,7 +209,7 @@ export default function InsightsPage() {
               {filterYear !== "" && (
                 <button
                   type="button"
-                  className="text-xs text-primary hover:underline"
+                  className="text-sm text-primary hover:underline"
                   onClick={() => {
                     setFilterYear("");
                     setFilterMonth("");
@@ -220,7 +220,7 @@ export default function InsightsPage() {
               )}
             </div>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">
+          <p className="mb-4 text-sm text-muted-foreground">
             {filterYear !== "" && filterMonth !== ""
               ? `Applications received in ${MONTHS[(filterMonth as number) - 1]} ${filterYear}`
               : "All requisitions · current snapshot"}
@@ -232,8 +232,8 @@ export default function InsightsPage() {
               return (
                 <Card key={stage} className="border-border/80">
                   <CardContent className="pt-6">
-                    <p className="text-2xl font-bold tabular-nums text-foreground">{count.toLocaleString()}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{cfg?.label ?? stage}</p>
+                    <p className="text-3xl font-bold tabular-nums text-foreground">{count.toLocaleString()}</p>
+                    <p className="mt-1 text-base text-muted-foreground">{cfg?.label ?? stage}</p>
                   </CardContent>
                 </Card>
               );
@@ -245,11 +245,11 @@ export default function InsightsPage() {
           <section>
             <Card>
               <CardHeader>
-                <h2 className="text-lg font-semibold">Pipeline distribution</h2>
+                <h2 className="text-xl font-semibold">Pipeline distribution</h2>
               </CardHeader>
               <CardContent>
                 {pieData.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No candidates yet</p>
+                  <p className="py-8 text-center text-base text-muted-foreground">No candidates yet</p>
                 ) : (
                   <div className="h-[280px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -285,10 +285,10 @@ export default function InsightsPage() {
               </CardHeader>
               <CardContent>
                 {total === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No candidates yet</p>
+                  <p className="py-8 text-center text-base text-muted-foreground">No candidates yet</p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-base">
                       <thead>
                         <tr className="border-b text-left text-muted-foreground">
                           <th className="pb-2 pr-4 font-medium">Stage</th>
@@ -325,7 +325,7 @@ export default function InsightsPage() {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-base">
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="pb-2 pr-4 font-medium">Requisition</th>

@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   description: "RecruitOS – calibrate job requirements and score candidates",
 };
 
+/** Avoid prerender at build time (no backend on Vercel); fixes /calibrate and other API-backed pages. */
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

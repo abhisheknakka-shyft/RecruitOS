@@ -47,7 +47,7 @@ App: **http://localhost:3000**
 ## Stack
 
 - **Frontend**: Next.js (App Router), Tailwind, ShadcnUI, Lucide.
-- **Backend**: FastAPI, PyMuPDF; scoring via **OpenAI**, **OpenRouter**, or **Gemini** (env-configurable).
+- **Backend**: FastAPI, PyMuPDF; scoring via **OpenAI**, **OpenRoutjober**, or **Gemini** (env-configurable).
 
 ## LLM provider (backend `.env`)
 
@@ -70,6 +70,21 @@ See `backend/.env.example` for a full template.
 
 1. **Calibrate** – Set requisition name, role, location, skills (tags), years of experience (slider), seniority levels. Submit to save.
 2. **Dashboard** – Upload PDF resumes (multiple). Backend extracts text with PyMuPDF, then asynchronously runs the ranking engine. The dashboard auto-refreshes candidate scores and shows per-metric points, matches, and evidence.
+
+## Deploy frontend on Vercel (fix 404)
+
+The Next.js app lives in **`frontend/`**. If you deploy the repo root, Vercel won’t see a build and you’ll get **404 NOT_FOUND**.
+
+1. In **Vercel** open your project → **Settings** tab.
+2. In the left sidebar, open **Build and Deployment** (or scroll to that section).
+3. Find **Root Directory** → click **Edit** (or the field), enter **`frontend`**, then **Save**.
+4. **Redeploy**: go to the **Deployments** tab → ⋮ on the latest deployment → **Redeploy**.
+
+Vercel will then build and serve the Next.js app from `frontend/`. The **backend** (FastAPI) does not run on Vercel; deploy it elsewhere (e.g. Railway, Render, Fly.io) and set **Environment Variable** in Vercel:
+
+- `NEXT_PUBLIC_API_URL` = your backend URL (e.g. `https://your-backend.up.railway.app`).
+
+---
 
 ## API
 

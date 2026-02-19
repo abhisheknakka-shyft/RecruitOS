@@ -7,7 +7,6 @@ import {
   listTemplates,
   getCandidates,
   getCandidateRankings,
-  rescoreCandidateRankings,
   uploadResumes,
   deleteCalibration,
   deleteCandidate,
@@ -36,9 +35,10 @@ import {
   Copy,
   Star,
   LayoutTemplate,
-  Sparkles,
-  RefreshCw,
   GripVertical,
+  Bell,
+  Share2,
+  Download,
 } from "lucide-react";
 import { createCalibration, type CalibrationCreate } from "@/lib/api";
 
@@ -109,8 +109,8 @@ function CondensedScoreCard({ ranking }: { ranking: RankedCandidateResult | unde
   if (!ranking) {
     return (
       <div className="space-y-1">
-        <p className="text-sm font-medium">Scoring not available</p>
-        <p className="text-xs text-muted-foreground">No ranking payload found for this candidate yet.</p>
+        <p className="text-base font-medium">Scoring not available</p>
+        <p className="text-sm text-muted-foreground">No ranking payload found for this candidate yet.</p>
       </div>
     );
   }
@@ -118,8 +118,8 @@ function CondensedScoreCard({ ranking }: { ranking: RankedCandidateResult | unde
   if (ranking.scoring.status !== "completed") {
     return (
       <div className="space-y-1">
-        <p className="text-sm font-medium">{statusLabel(ranking.scoring.status)}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-base font-medium">{statusLabel(ranking.scoring.status)}</p>
+        <p className="text-sm text-muted-foreground">
           {ranking.scoring.status === "failed"
             ? ranking.scoring.error || "Scoring failed."
             : "Scoring is running asynchronously."}
@@ -134,26 +134,40 @@ function CondensedScoreCard({ ranking }: { ranking: RankedCandidateResult | unde
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">Candidate Match</p>
-        <span className="text-sm font-semibold text-primary">{ranking.scoring.total_score ?? 0}%</span>
+        <p className="text-base font-medium">Candidate Match</p>
+        <span className="text-base font-semibold text-primary">{ranking.scoring.total_score ?? 0}%</span>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {ranking.scoring.experience_years != null
           ? `${ranking.scoring.experience_years} yrs exp detected`
           : "Experience not confidently detected"}
       </p>
       <div className="space-y-2">
-        {subMetrics.slice(0, 4).map((metric) => (
-          <div key={metric.key} className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium">{metric.label}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {metric.points_earned}/{metric.points_possible}
-              </p>
+        {subMetrics.slice(0, 4).map((metric) => {
+          const hoverText = [
+            metric.rationale?.trim() || "No explanation available.",
+            metric.matched_terms?.length
+              ? ` Matched: ${metric.matched_terms.slice(0, 8).join(", ")}${metric.matched_terms.length > 8 ? "…" : ""}`
+              : "",
+          ]
+            .join("")
+            .trim();
+          return (
+            <div
+              key={metric.key}
+              className="space-y-1 cursor-help rounded-md px-1.5 py-0.5 -mx-1.5 -my-0.5 hover:bg-muted/50 transition-colors"
+              title={hoverText}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">{metric.label}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {metric.points_earned}/{metric.points_possible}
+                </p>
+              </div>
+              <DotScale rating={metric.rating} />
             </div>
-            <DotScale rating={metric.rating} />
-          </div>
-        ))}
+          );
+        })}
       </div>
       {matchedSkills.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
@@ -328,32 +342,6 @@ export default function DashboardPage() {
     }
   };
 
-  const onRescoreAllCandidates = async (calibrationId: string) => {
-    setError(null);
-    try {
-      const result = await rescoreCandidateRankings(calibrationId);
-      await fetchRankingsForCalibration(calibrationId, true);
-      setSuccessMessage(
-        result.queued > 0
-          ? `Queued ${result.queued} candidate${result.queued === 1 ? "" : "s"} for rescoring.`
-          : "Rescore requested. Candidates may already be processing."
-      );
-      setTimeout(() => setSuccessMessage(null), 3500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rescore");
-    }
-  };
-
-  const onRescoreCandidate = async (calibrationId: string, candidateId: string) => {
-    setError(null);
-    try {
-      await rescoreCandidateRankings(calibrationId, candidateId);
-      await fetchRankingsForCalibration(calibrationId, true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rescore candidate");
-    }
-  };
-
   const handleCreateFromTemplate = async (templateId: string, requisitionName: string) => {
     setError(null);
     try {
@@ -454,38 +442,53 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-10 border-b border-border bg-header-bg backdrop-blur-md">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <Link href="/" className="font-semibold text-primary">
+          <Link href="/" className="text-xl font-semibold text-primary">
             RecruitOS
           </Link>
           <nav className="flex gap-4">
-            <Link href="/calibrate" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/calibrate" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Calibrate
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-primary underline">
+            <Link href="/dashboard" className="text-lg font-medium text-primary underline underline-offset-4">
               Dashboard
             </Link>
-            <Link href="/pipeline" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/pipeline" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Pipeline
             </Link>
-            <Link href="/insights" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/insights" className="text-lg font-medium text-muted-foreground hover:text-foreground">
               Insights
             </Link>
           </nav>
+          <div className="flex items-center gap-2">
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Notifications">
+              <Bell className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Share">
+              <Share2 className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Download">
+              <Download className="h-6 w-6" />
+            </button>
+            <button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Report">
+              <FileTextIcon className="h-6 w-6" />
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            <LayoutDashboard className="h-6 w-6" />
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+            <LayoutDashboard className="h-6 w-6 text-muted-foreground" />
             Job postings
           </h1>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               className="gap-2"
               onClick={async () => {
                 setTemplateModalOpen(true);
@@ -500,7 +503,7 @@ export default function DashboardPage() {
               <LayoutTemplate className="h-4 w-4" />
               Create from template
             </Button>
-            <Button asChild className="gap-2">
+            <Button asChild size="sm" className="gap-2">
               <Link href="/calibrate">
                 <Plus className="h-4 w-4" />
                 Add job posting
@@ -535,34 +538,28 @@ export default function DashboardPage() {
               onCollapseCandidate={() => setExpandedCandidate(cal.id, null)}
               onDeleteCandidate={(candidateId) => onDeleteCandidate(cal.id, candidateId)}
               onUpdateCandidate={(candidateId, update) => onUpdateCandidate(cal.id, candidateId, update)}
-              onRescoreAll={() => onRescoreAllCandidates(cal.id)}
-              onRescoreCandidate={(candidateId) => onRescoreCandidate(cal.id, candidateId)}
             />
           ))}
         </div>
 
         {error && (
-          <Card className="mb-6 border-destructive/50 bg-destructive/5">
-            <CardContent className="pt-6">
-              <p className="text-sm text-destructive">{error}</p>
-            </CardContent>
-          </Card>
+          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-base text-destructive">
+            {error}
+          </div>
         )}
 
         {successMessage && (
-          <Card className="mb-6 border-primary/30 bg-primary/5">
-            <CardContent className="pt-6">
-              <p className="text-sm text-foreground">{successMessage}</p>
-            </CardContent>
-          </Card>
+          <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+            {successMessage}
+          </div>
         )}
 
         {calibrations.length === 0 && !error && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
+          <Card className="border-dashed border-border/80 bg-card/50">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <FileText className="mb-4 h-12 w-12 text-muted-foreground/70" />
               <p className="text-muted-foreground">No job postings yet.</p>
-              <Button asChild className="mt-4">
+              <Button asChild className="mt-5" size="sm">
                 <Link href="/calibrate">Add job posting</Link>
               </Button>
             </CardContent>
@@ -588,7 +585,7 @@ function TemplateModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-lg">Create job from template</CardTitle>
+          <CardTitle className="text-xl">Create job from template</CardTitle>
           <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             ×
           </Button>
@@ -599,9 +596,9 @@ function TemplateModal({
           ) : (
             <>
               <div>
-                <label className="mb-1 block text-sm font-medium">Template</label>
+                <label className="mb-1 block text-base font-medium">Template</label>
                 <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-base"
                   value={selectedId}
                   onChange={(e) => {
                     setSelectedId(e.target.value);
@@ -618,10 +615,10 @@ function TemplateModal({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Job title</label>
+                <label className="mb-1 block text-base font-medium">Job title</label>
                 <input
                   type="text"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-base"
                   placeholder="e.g. Senior Data Engineer"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -662,8 +659,6 @@ function JobCard({
   onCollapseCandidate,
   onDeleteCandidate,
   onUpdateCandidate,
-  onRescoreAll,
-  onRescoreCandidate,
 }: {
   calibration: Calibration;
   candidates: CandidateResult[];
@@ -679,13 +674,9 @@ function JobCard({
   onCollapseCandidate: () => void;
   onDeleteCandidate: (candidateId: string) => void;
   onUpdateCandidate: (candidateId: string, update: { stage?: string; rating?: number; notes?: string }) => void;
-  onRescoreAll: () => Promise<void>;
-  onRescoreCandidate: (candidateId: string) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localNotes, setLocalNotes] = useState("");
-  const [rescoringAll, setRescoringAll] = useState(false);
-  const [rescoringCandidateId, setRescoringCandidateId] = useState<string | null>(null);
   const [hoveredScoreCandidateId, setHoveredScoreCandidateId] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<CandidateSortMode>("overall");
   const [manualOverride, setManualOverride] = useState(false);
@@ -818,30 +809,6 @@ function JobCard({
     ? calibration.pipeline_stages
     : ["Applied", "Screening", "Interview", "Offer"];
 
-  const scoringCounts = {
-    completed: rankings.filter((r) => r.scoring?.status === "completed").length,
-    processing: rankings.filter((r) => r.scoring?.status === "processing" || r.scoring?.status === "pending").length,
-    failed: rankings.filter((r) => r.scoring?.status === "failed").length,
-  };
-
-  const runRescoreAll = async () => {
-    setRescoringAll(true);
-    try {
-      await onRescoreAll();
-    } finally {
-      setRescoringAll(false);
-    }
-  };
-
-  const runRescoreCandidate = async (candidateId: string) => {
-    setRescoringCandidateId(candidateId);
-    try {
-      await onRescoreCandidate(candidateId);
-    } finally {
-      setRescoringCandidateId(null);
-    }
-  };
-
   useEffect(() => {
     return () => {
       if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
@@ -876,11 +843,16 @@ function JobCard({
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-medium leading-tight">{calibration.requisition_name}</CardTitle>
-          <div className="flex shrink-0 items-center gap-0">
+    <Card className="overflow-hidden border-border/80 shadow-sm transition-shadow hover:shadow-md">
+      <CardHeader className="border-b border-border/60 bg-muted/20 pb-4 pt-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-lg font-semibold leading-tight tracking-tight text-foreground">
+              {calibration.requisition_name}
+            </CardTitle>
+            <p className="mt-1 text-base text-muted-foreground">{calibration.role}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-background/80 p-0.5">
             <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
               <Link href={`/calibrate?edit=${encodeURIComponent(calibration.id)}`} aria-label="Edit">
                 <Pencil className="h-4 w-4" />
@@ -897,46 +869,30 @@ function JobCard({
             </Button>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">{calibration.role}</p>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-5">
         <input ref={fileInputRef} type="file" accept=".pdf" multiple className="hidden" onChange={onUpload} />
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="gap-1"
+            className="gap-2"
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
           >
-            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Upload resumes
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={runRescoreAll}
-            disabled={rescoringAll || candidates.length === 0}
-          >
-            {rescoringAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Rescore all
-          </Button>
-          <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-            {scoringCounts.completed} scored · {scoringCounts.processing} processing
-            {scoringCounts.failed ? ` · ${scoringCounts.failed} failed` : ""}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="text-xs font-medium text-muted-foreground">Sort</label>
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+            <label className="text-sm font-medium text-muted-foreground">Sort</label>
             <select
               value={sortMode}
               onChange={(e) => {
                 setSortMode(e.target.value as CandidateSortMode);
                 setManualOverride(false);
               }}
-              className="h-8 rounded border bg-background px-2 text-xs"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {CANDIDATE_SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -944,44 +900,24 @@ function JobCard({
                 </option>
               ))}
             </select>
-            <span className="hidden text-xs text-muted-foreground sm:inline">Drag candidates anytime to reorder</span>
             {manualOverride && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-8 px-2 text-xs"
-                onClick={() => setManualOverride(false)}
-              >
-                Use selected sort
+              <Button type="button" size="sm" variant="ghost" className="h-9 text-sm" onClick={() => setManualOverride(false)}>
+                Use sort order
               </Button>
             )}
           </div>
         </div>
 
-        <div className="rounded-lg border bg-muted/30">
-          <p className="border-b px-4 py-2 text-sm font-medium text-muted-foreground">Candidates ({candidates.length})</p>
+        <div className="rounded-xl border border-border/60 bg-muted/20">
+          <p className="border-b border-border/60 px-4 py-3 text-base font-medium text-muted-foreground">
+            Candidates ({candidates.length})
+          </p>
           {expandedCandidate ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onCollapseCandidate}>
                   <ArrowLeft className="h-4 w-4" />
                   Back to list
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  disabled={rescoringCandidateId === expandedCandidate.id}
-                  onClick={() => runRescoreCandidate(expandedCandidate.id)}
-                >
-                  {rescoringCandidateId === expandedCandidate.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  Rescore candidate
                 </Button>
                 <Button
                   type="button"
@@ -1005,16 +941,16 @@ function JobCard({
               <h3 className="font-medium">{getDisplayNameFromParsedText(expandedCandidate.parsed_text, expandedCandidate.name)}</h3>
 
               {expandedRanking && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Hover the score badge in the candidate list for condensed scoring details.
                 </p>
               )}
 
               <div className="flex flex-wrap items-center gap-4">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Stage</label>
+                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Stage</label>
                   <select
-                    className="rounded border bg-background px-2 py-1 text-sm"
+                    className="rounded border bg-background px-2 py-1 text-base"
                     value={expandedCandidate.stage ?? stages[0]}
                     onChange={(e) => onUpdateCandidate(expandedCandidate.id, { stage: e.target.value })}
                   >
@@ -1026,7 +962,7 @@ function JobCard({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Rating (1–5)</label>
+                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Rating (1–5)</label>
                   <div className="flex gap-0.5">
                     {[1, 2, 3, 4, 5].map((r) => (
                       <button
@@ -1044,9 +980,9 @@ function JobCard({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (saved on blur)</label>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Notes (saved on blur)</label>
                 <textarea
-                  className="min-h-[80px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  className="min-h-[80px] w-full rounded-md border bg-background px-3 py-2 text-base"
                   placeholder="Private notes…"
                   value={localNotes}
                   onChange={(e) => setLocalNotes(e.target.value)}
@@ -1054,12 +990,12 @@ function JobCard({
                 />
               </div>
 
-              <pre className="max-h-[50vh] overflow-auto rounded-md border bg-background p-4 text-sm whitespace-pre-wrap font-sans">
+              <pre className="max-h-[50vh] overflow-auto rounded-md border bg-background p-4 text-base whitespace-pre-wrap font-sans">
                 {expandedCandidate.parsed_text || "(No text extracted)"}
               </pre>
             </div>
           ) : candidates.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">No resumes yet. Upload PDFs above.</p>
+            <p className="px-4 py-8 text-center text-base text-muted-foreground">No resumes yet. Upload PDFs above.</p>
           ) : (
             <ul className="divide-y">
               {sortedCandidates.map((c) => {
@@ -1092,12 +1028,12 @@ function JobCard({
                         className="-m-2 flex min-w-0 flex-1 items-center gap-4 rounded-md p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                         onClick={() => onExpandCandidate(c.id)}
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1 text-left">
                           <p className="truncate font-medium text-foreground">{displayName}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             {c.stage ?? stages[0]}
                             {(c.rating ?? 0) > 0 && ` · ${c.rating}/5`}
                           </p>
@@ -1112,7 +1048,7 @@ function JobCard({
                               {score != null ? (
                                 <ScoreCircle score={score} size={44} />
                               ) : (
-                                <span className={`rounded px-2 py-0.5 text-xs ${statusClass(ranking?.scoring.status)}`}>
+                                <span className={`rounded px-2 py-0.5 text-sm ${statusClass(ranking?.scoring.status)}`}>
                                   {statusLabel(ranking?.scoring.status)}
                                 </span>
                               )}
@@ -1131,7 +1067,7 @@ function JobCard({
                         <FileTextIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       </button>
                       <select
-                        className="w-28 shrink-0 rounded border bg-background px-2 py-1 text-xs"
+                        className="w-28 shrink-0 rounded border bg-background px-2 py-1 text-sm"
                         value={c.stage ?? stages[0]}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
