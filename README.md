@@ -16,14 +16,15 @@ pip install -r requirements.txt
 cp .env.example .env              # Edit .env: set LLM_PROVIDER and the API key for that provider
 ```
 
-Then start the API **from the project root** (the folder that contains `backend/`). Do not run uvicorn from inside `backend/` or you'll get `ModuleNotFoundError: No module named 'backend'`.
+From project root, start the API (no need to activate venv):
 
 ```bash
-cd ..                            # back to project root
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+backend/venv/bin/python -m backend
 ```
 
-Or from project root in one go: `./run-backend.sh`
+Windows: `backend\venv\Scripts\python.exe -m backend`
+
+The app must run from the project root so the `backend` package is on the path.
 
 API: **http://localhost:8000**
 
