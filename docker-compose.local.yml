@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: recruitos-backend:local
+    container_name: recruitos-backend-local
+    env_file:
+      - backend/.env
+    environment:
+      PORT: "8000"
+      UVICORN_WORKERS: "1"
+      RECRUITOS_DATA_DIR: /app/backend/data
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      TRUSTED_HOSTS: localhost,127.0.0.1
+    ports:
+      - "8000:8000"
+    volumes:
+      - recruitos-backend-data:/app/backend/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    image: recruitos-frontend:local
+    container_name: recruitos-frontend-local
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  recruitos-backend-data:

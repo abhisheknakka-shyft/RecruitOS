@@ -48,7 +48,7 @@ App: **http://localhost:3000**
 ## Stack
 
 - **Frontend**: Next.js (App Router), Tailwind, ShadcnUI, Lucide.
-- **Backend**: FastAPI, PyMuPDF; scoring via **OpenAI**, **OpenRoutjober**, or **Gemini** (env-configurable).
+- **Backend**: FastAPI, PyMuPDF; scoring via **OpenAI**, **OpenRouter**, or **Gemini** (env-configurable).
 
 ## LLM provider (backend `.env`)
 
@@ -66,6 +66,26 @@ See `backend/.env.example` for a full template.
 
 - Backend: copy `backend/.env.example` to `backend/.env`, set `LLM_PROVIDER` and the chosen provider’s API key.
 - Frontend: optional `.env.local` with `NEXT_PUBLIC_API_URL=http://localhost:8000` if the API is not on that URL.
+
+## Deploy on EC2 / internal infrastructure
+
+Use `docs/DEPLOYMENT_EC2.md` for the production path with:
+- Dockerized frontend and backend.
+- Separate GitHub Actions workflows for frontend/backend deployment.
+- EC2 + Nginx reverse-proxy setup with distinct frontend and API domains.
+- Guidance on whether to split repos (monorepo is recommended for now).
+
+## Local Docker smoke test
+
+1. Ensure Docker Desktop/daemon is running.
+2. Create backend env:
+   - `cp backend/.env.example backend/.env`
+   - Set your provider key in `backend/.env` (or the scoring endpoints may fail).
+3. Build + run both services:
+   - `docker compose -f docker-compose.local.yml up --build`
+4. Validate:
+   - Frontend: `http://localhost:3000`
+   - Backend health: `http://localhost:8000/health`
 
 ## Flow
 
