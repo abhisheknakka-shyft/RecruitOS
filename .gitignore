@@ -31,3 +31,12 @@ next-env.d.ts
 
 # Backend persistence (local data)
 backend/data/
+
+# Deployment local secrets/artifacts
+deploy/ec2/.secrets/
+deploy/ec2/*.env
+deploy/ec2/*.env.*
+deploy/ec2/*.pem
+deploy/ec2/*.key
+deploy/ec2/id_*
+deploy/ec2/known_hosts

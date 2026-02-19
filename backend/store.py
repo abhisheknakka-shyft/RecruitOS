@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -14,7 +15,7 @@ from backend.models import (
     RankingPayload,
 )
 
-_DATA_DIR = Path(__file__).resolve().parent / "data"
+_DATA_DIR = Path(os.getenv("RECRUITOS_DATA_DIR", Path(__file__).resolve().parent / "data"))
 _DATA_FILE = _DATA_DIR / "recruitos_data.json"
 
 _calibrations: dict[str, Calibration] = {}
